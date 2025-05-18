@@ -10,5 +10,4 @@ function [outliers] = outliersDetector(dataset)
     
     % Identifica gli outlier
     outliers = (dataset < lower_bound) | (dataset > upper_bound);
-    
 end

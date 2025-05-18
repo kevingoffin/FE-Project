@@ -1,39 +1,13 @@
 clear; clc;
 format long
-%% Question 1B
-% === Parametri OU ===
-theta = 0.041;
-sigma = 0.0147;   % std dev stazionaria
 
-% === Stop-loss fisso (in unità di S) ===
-l = -1.960;
-
-% === Costi di transazione (in unità di S) ===
-c_vals = linspace(0.001, 0.75, 100);
-
-flag = 1;
-f = 1;
-
-[d_vals, u_vals] = maximize_mu(c_vals, l, sigma, theta, flag, f);
-
-% === Plot risultati ===
-figure;
-plot(c_vals, -d_vals, 'r-', 'LineWidth', 1.5); hold on;
-plot(c_vals, u_vals, 'b--', 'LineWidth', 1.5);
-xlabel('Transaction cost c (in S units)');
-ylabel('Optimal trading bands');
-legend('|d^*|','u^*','Location','NorthWest');
-title('Figure 3 – Optimal bands vs. transaction cost');
-grid on;
-
-%% Question 2 
-
-% Leggi il file Excel (salta le prime due righe di intestazione)
+%% Question b
+% Read the excel
 opts = detectImportOptions('HO-LGO.xlsm', 'Sheet', 'HO-LGO 30min');
-opts.DataRange = 'A3'; % Inizia dalla riga 3
+opts.DataRange = 'A3'; % Starts at the row 3
 T = readtable('HO-LGO.xlsm', opts);
 
-% Estrai le colonne di interesse
+% Take the columns of interest
 % Timestamp, Bid HO, Ask HO, Bid LGO, Ask LGO
 timestamp = T{:, 2};      % Timestamp
 bid_HO    = T{:, 3};      % Bid HO
@@ -41,7 +15,7 @@ bid_LGO   = T{:, 4};      % Bid LGO
 ask_HO    = T{:, 7};      % Ask HO
 ask_LGO   = T{:, 8};      % Ask LGO
 
-% Filtra righe valide (dove tutti i dati sono disponibili)
+% Filter valid rows (where all data is available)
 valid_idx = ~isnan(bid_HO) & ~isnan(ask_HO) & ~isnan(bid_LGO) & ~isnan(ask_LGO);
 timestamp = timestamp(valid_idx);
 bid_HO = bid_HO(valid_idx);
@@ -49,45 +23,54 @@ ask_HO = ask_HO(valid_idx);
 bid_LGO = bid_LGO(valid_idx);
 ask_LGO = ask_LGO(valid_idx);
 
-% Calcola i mid-price
+% Compute the mid-price
 mid_HO = (bid_HO + ask_HO) / 2;
 mid_LGO = (bid_LGO + ask_LGO) / 2;
 conv = 314;   % converter
 mid_HO = mid_HO * conv;  
 
-% Calcola Rt
+% Compute Rt
 Rt = log(mid_HO ./ mid_LGO);
 
-[Rt_IS_filtered, Rt_OS_filtered, time_IS_filtered, time_OS_filtered] = cleaner(Rt, timestamp, 9);
-
-
+% Remove the outliers and split the dataset in IS and OS with 9 months in
+% IS
+border_IS_OS = calmonths(9);
+Input_Format = 'yyyy-MM-dd HH:mm:ss';
+verbose = true;
+threshold_AntipersistentOutliers = 0.95;
+[Rt_IS, Rt_OS, time_IS, time_OS] = cleaner(Rt, timestamp, border_IS_OS, Input_Format, threshold_AntipersistentOutliers, verbose);
 %% Converting data to NY time 9:00-16:00
-
-% 1) Converti i datetime (assunti in UTC) in fuso NY
-time_IS_NY = time_IS_filtered;
+% 1) Convert the time in the New-York time-zone
+time_IS_NY = time_IS;
 time_IS_NY.TimeZone = 'Europe/Rome';
 time_IS_NY.TimeZone = 'America/New_York';
 
-time_OS_NY = time_OS_filtered;
+time_OS_NY = time_OS;
 time_OS_NY.TimeZone = 'Europe/Rome';
 time_OS_NY.TimeZone = 'America/New_York';
 
-flag = 1;
+% Keep the dates in the time window 9:00-16:00
+hour_beginning = 9; hour_ending = 16;
+flag = true;
+[Rt_IS_9_16, Rt_OS_9_16] = filter_time_window(time_IS_NY, time_OS_NY, Rt_IS, Rt_OS, hour_beginning, hour_ending, flag);
 
-[Rt_IS_NY_Filtered, Rt_OS_NY_Filtered] = filter_NY(time_IS_NY, time_OS_NY, Rt_IS_filtered, Rt_OS_filtered, 9, 16, flag);
+% Convert the table in an array
+Rt_IS_9_16 = table2array(Rt_IS_9_16(:, 2));
 
 % Calibration
-
 deltaT = 1/9072;
-[eta_hat, k_hat, sigma_hat] = calibration(Rt_IS_NY_Filtered, deltaT, 1);
+[eta_hat, k_hat, sigma_hat] = calibration(Rt_IS_9_16, deltaT);
+
+fprintf('===Parameters values for 9-16===\n')
+fprintf('k_hat = %d \n', eta_hat);
+fprintf('sigma_hat = %d \n', k_hat);
+fprintf('eta_hat = %d \n', sigma_hat);
 
 % Process simulation
-
-Rt_0 = table2array(Rt_IS_NY_Filtered(:, 2));
 n_sim = 1e4;
 rng(42);
 
-[sigma_hat_i, k_hat_i, eta_hat_i] = simulation(Rt_0, n_sim, deltaT, eta_hat, k_hat, sigma_hat);
+[sigma_hat_i, k_hat_i, eta_hat_i] = simulation(Rt_IS_9_16, n_sim, deltaT, eta_hat, k_hat, sigma_hat);
 
 figure; histogram(k_hat_i,100,'Normalization','pdf'); title('k\_hat');
 figure; histogram(sigma_hat_i,100,'Normalization','pdf'); title('\sigma\_hat');
@@ -107,14 +90,11 @@ fprintf('95%% CI per eta_hat:   [%.15f, %.15f]\n', ci_eta(1),   ci_eta(2));
 
 
 %% Repeting with 8:00-16:00 NYT
-
 flag = 1;
 
 [Rt_IS_NY_Filtered, Rt_OS_NY_Filtered] = filter_NY(time_IS_NY, time_OS_NY, Rt_IS_filtered, Rt_OS_filtered, 8, 16, flag);
 
 % Calibration
-
-
 [eta_hat, k_hat, sigma_hat] = calibration(Rt_IS_NY_Filtered, deltaT, 1);
 
 % Process simulation
@@ -140,12 +120,7 @@ fprintf('95%% CI per k_hat :     [%.15f, %.15f]\n', ci_k(1),     ci_k(2));
 fprintf('95%% CI per sigma_hat: [%.15f, %.15f]\n', ci_sigma(1), ci_sigma(2));
 fprintf('95%% CI per eta_hat:   [%.15f, %.15f]\n', ci_eta(1),   ci_eta(2));
 
-%% Check outliers
-
-% SBORATYYYYY
-
 %% Question C
-
 flag = 2;
 [bid_HO_IS_filtered, bid_HO_OS_filtered, time_IS_filtered, time_OS_filtered] = cleaner(bid_HO, timestamp, 9);
 [ask_HO_IS_filtered, ask_HO_OS_filtered, time_IS_filtered, time_OS_filtered] = cleaner(ask_HO, timestamp, 9);
@@ -250,8 +225,32 @@ fprintf('Actual result over 3 month %.6f %%\n', ann_pct_return)
 fprintf('maximum transaction cost normalized %.6f\n', c_max)
 fprintf('Actual result over 3 month with maximum transaction costs %.6f %%\n', ann_pct_return_cmax)
 
+%% Question a
+% === Parameters OU ===
+theta = 0.041;
+%sigma = 0.0147;   % diffusion parameter
+% WHY NOT SIGMA ??????
 
-%% D
+% === Stop-loss level (in unit of steady-state standard deviation for the OU dynamics) ===
+l = -1.960;
+
+% === Cost of transaction (in unit of steady-state standard deviation for the OU dynamics) ===
+c_vals = linspace(0.001, 0.75, 100);
+f = 1; % No leverage assumption
+
+[d_vals, u_vals] = maximize_mu(c_vals, l, SIGMA, theta, f);
+
+% === Plot results ===
+figure;
+plot(c_vals, -d_vals, 'r-', 'LineWidth', 1.5); hold on;
+plot(c_vals, u_vals, 'b--', 'LineWidth', 1.5);
+xlabel('Transaction cost c (in S units)');
+ylabel('Optimal trading bands');
+legend('|d^*|','u^*','Location','NorthWest');
+title('Figure 3 – Optimal bands vs. transaction cost');
+grid on;
+
+%% Question D
 
 %let's try with some leverage
 
