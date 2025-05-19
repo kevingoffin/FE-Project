@@ -13,7 +13,7 @@ timestamp = T{:, 2};      % Timestamp
 bid_HO    = T{:, 3};      % Bid HO
 bid_LGO   = T{:, 4};      % Bid LGO
 ask_HO    = T{:, 7};      % Ask HO
-ask_LGO   = T{:, 8};      % Ask LGO
+ask_LGO   = T{:, 8};      % Ask LGO-
 
 % Filter valid rows (where all data is available)
 valid_idx = ~isnan(bid_HO) & ~isnan(ask_HO) & ~isnan(bid_LGO) & ~isnan(ask_LGO);
@@ -26,8 +26,8 @@ ask_LGO = ask_LGO(valid_idx);
 % Compute the mid-price
 mid_HO = (bid_HO + ask_HO) / 2;
 mid_LGO = (bid_LGO + ask_LGO) / 2;
-conv = 314;   % converter
-mid_HO = mid_HO * conv;  
+mid_HO = mid_HO * 42;
+mid_LGO = mid_LGO / 7.5;
 
 % Compute Rt
 Rt = log(mid_HO ./ mid_LGO);
@@ -36,35 +36,33 @@ Rt = log(mid_HO ./ mid_LGO);
 % IS
 border_IS_OS = calmonths(9);
 Input_Format = 'yyyy-MM-dd HH:mm:ss';
-verbose = true;
+verbose = false;
 threshold_AntipersistentOutliers = 0.95;
 [Rt_IS, Rt_OS, time_IS, time_OS] = cleaner(Rt, timestamp, border_IS_OS, Input_Format, threshold_AntipersistentOutliers, verbose);
+
 %% Converting data to NY time 9:00-16:00
-% 1) Convert the time in the New-York time-zone
-time_IS_NY = time_IS;
-time_IS_NY.TimeZone = 'Europe/Rome';
-time_IS_NY.TimeZone = 'America/New_York';
-
-time_OS_NY = time_OS;
-time_OS_NY.TimeZone = 'Europe/Rome';
-time_OS_NY.TimeZone = 'America/New_York';
-
 % Keep the dates in the time window 9:00-16:00
 hour_beginning = 9; hour_ending = 16;
 flag = true;
-[Rt_IS_9_16, ~] = filter_time_window(time_IS_NY, time_OS_NY, Rt_IS, Rt_OS, hour_beginning, hour_ending, flag);
+[IS_9_16, ~] = filter_time_window(time_IS, time_OS, Rt_IS, Rt_OS, hour_beginning, hour_ending, flag);
 
 % Convert the table in an array
-Rt_IS_9_16 = table2array(Rt_IS_9_16(:, 2));
+Rt_IS_9_16 = table2array(IS_9_16(:, 2));
 
 % Calibration
-deltaT = 1/9072;
+deltaT = 1/length(Rt_IS_9_16);
 [eta_hat, k_hat, sigma_hat] = calibration(Rt_IS_9_16, deltaT);
+[eta_hat_bis, k_hat_bis, sigma_hat_bis] = calibration_bis(Rt_IS_9_16, deltaT, 2);
 
 fprintf('===Parameters values for 9-16===\n')
-fprintf('k_hat = %d \n', eta_hat);
-fprintf('sigma_hat = %d \n', k_hat);
-fprintf('eta_hat = %d \n', sigma_hat);
+fprintf('k_MLE = %d \n', eta_hat);
+fprintf('sigma_MLE = %d \n', k_hat);
+fprintf('eta_MLE = %d \n', sigma_hat);
+
+fprintf('===Parameters values bis for 9-16===\n')
+fprintf('k_MLE = %d \n', eta_hat_bis);
+fprintf('sigma_MLE = %d \n', k_hat_bis);
+fprintf('eta_MLE = %d \n', sigma_hat_bis);
 
 % Process simulation
 n_sim = 1e4;
@@ -73,16 +71,16 @@ alpha_CI = 2.5;
 simulation(Rt_IS_9_16(1), size(Rt_IS_9_16, 1), n_sim, deltaT, eta_hat, k_hat, sigma_hat, alpha_CI);
 
 %% Repeating with 8:00-16:00 NYT
-% Keep the dates in the time window 9:00-16:00
+% Keep the dates in the time window 8:00-16:00
 hour_beginning = 8; hour_ending = 16;
 flag = true;
-[Rt_IS_8_16, ~] = filter_time_window(time_IS_NY, time_OS_NY, Rt_IS, Rt_OS, hour_beginning, hour_ending, flag);
+[IS_8_16, ~] = filter_time_window(time_IS_NY, time_OS_NY, Rt_IS, Rt_OS, hour_beginning, hour_ending, flag);
 
 % Convert the table in an array
-Rt_IS_8_16 = table2array(Rt_IS_8_16(:, 2));
+Rt_IS_8_16 = table2array(IS_8_16(:, 2));
 
 % Calibration
-deltaT = 1/9072;
+deltaT = 1/length(Rt_IS_8_16);
 [eta_hat, k_hat, sigma_hat] = calibration(Rt_IS_8_16, deltaT);
 
 fprintf('===Parameters values for 8-16===\n')
@@ -275,7 +273,7 @@ mid_RXA = mid_RXA(valid_idx_new);
 Rt_pair_1 = log(mid_IKA./mid_OATA);       % pair IKA, OATA
 Rt_pair_2 = log(mid_OEA./mid_RXA);        % pair OEA, RXA
 
-deltaT_new = 1/(252*48*30);
+deltaT_new = 1/length(Rt_pair_1);
 border_IS_OS = calmonths(4);
 [Rt_pair_1_IS_filtered, ~, ~, ~] = cleaner(Rt_pair_1, timestamp_new, border_IS_OS, Input_Format, threshold_AntipersistentOutliers, verbose);
 [Rt_pair_2_IS_filtered, ~, ~, ~] = cleaner(Rt_pair_2, timestamp_new, border_IS_OS, Input_Format, threshold_AntipersistentOutliers, verbose);

@@ -22,8 +22,12 @@ function [Rt_IS, Rt_OS, time_IS, time_OS] = cleaner(Rt, timestamp, n, Input_Form
     split_date = start_date + n;  % n is the IS period
     if verbose
         % Save the original timestamp
-        timestamp_orginal = timestamp;
+        timestamp_original = timestamp;
     end
+
+    % Create logical indices for period separation
+    IS_idx = timestamp < split_date;
+    OS_idx = timestamp >= split_date;
 
     % Copy the original Rt % Calculate IQR thresholds
     IQR = iqr(Rt);
@@ -45,20 +49,20 @@ function [Rt_IS, Rt_OS, time_IS, time_OS] = cleaner(Rt, timestamp, n, Input_Form
         idx_split_date_outliersfree = find(idx_outliersfree, 1, 'first'); % Returns first occurrence
 
         % Displays results
-        fprintf('Extreme outliers IS: %d found\n', size(timestamp_orginal(1:idx_split_date-1),1) - size(timestamp(1:idx_split_date_outliersfree-1),1));
-        fprintf('Extreme outliers OS: %d found\n', size(timestamp_orginal(idx_split_date:end),1) - size(timestamp(idx_split_date_outliersfree:end),1));
-
+        fprintf('Extreme outliers IS: %d found\n', size(timestamp_original(1:idx_split_date-1),1) - size(timestamp(1:idx_split_date_outliersfree-1),1));
+        fprintf('Extreme outliers OS: %d found\n', size(timestamp_original(idx_split_date:end),1) - size(timestamp(idx_split_date_outliersfree:end),1));
+        
+        % Displays the final values
+        fprintf("The removed extreme outliers are :")
+        timestamp_original(mask)
+        
         % Save the original timestamp
         timestamp_orginal = timestamp;
     end
 
-    % Compute differences for outlier detection
-    diff_prev = abs(Rt(2:end-1) - Rt(1:end-2));
-    diff_next = abs(Rt(3:end) - Rt(2:end-1));
-    
     % Create a logical mask for outliers (same size as Rt_without_extreme_outliers)
     is_outlier = false(size(Rt));
-    is_outlier(2:end-1) = (diff_prev > IQR) & (diff_next >= threshold_AntipersistentOutliers * IQR);
+    is_outlier(2:end-1) = (abs(Rt(2:end-1) - Rt(1:end-2)) > IQR) & (abs(Rt(3:end) - Rt(2:end-1)) >= threshold_AntipersistentOutliers * IQR);
     
     % Remove outliers directly using logical indexing
     timestamp = timestamp(~is_outlier);
@@ -70,8 +74,12 @@ function [Rt_IS, Rt_OS, time_IS, time_OS] = cleaner(Rt, timestamp, n, Input_Form
     % Display the removed outliers
     if verbose
         % Displays results
-        fprintf('Extreme outliers IS: %d found\n', size(timestamp_orginal(1:idx_split_date_outliersfree-1),1) - size(timestamp(IS_idx),1));
-        fprintf('Extreme outliers OS: %d found\n', size(timestamp_orginal(idx_split_date_outliersfree:end),1) - size(timestamp(OS_idx),1));
+        fprintf('Antipersistent outliers IS: %d found\n', size(timestamp_orginal(1:idx_split_date_outliersfree-1),1) - size(timestamp(IS_idx),1));
+        fprintf('Antipersistent outliers OS: %d found\n', size(timestamp_orginal(idx_split_date_outliersfree:end),1) - size(timestamp(OS_idx),1));
+
+        % Displays the final values
+        fprintf("The removed antipersistent outliers are :")
+        timestamp_original(is_outlier)
     end
     
     % Allocate the values

@@ -26,8 +26,8 @@ ask_LGO = ask_LGO(valid_idx);
 % Compute the mid-price
 mid_HO = (bid_HO + ask_HO) / 2;
 mid_LGO = (bid_LGO + ask_LGO) / 2;
-conv = 314;   % converter
-mid_HO = mid_HO * conv;  
+mid_HO = mid_HO * 42;
+mid_LGO = mid_LGO / 7.5;
 
 % Compute Rt
 Rt = log(mid_HO ./ mid_LGO);
@@ -47,6 +47,16 @@ time_IS_NY.TimeZone = 'America/New_York';
 
 time_OS_NY = time_OS;
 time_OS_NY.TimeZone = 'Europe/Rome';
+time_OS_NY.TimeZone = 'America/New_York';
+
+time_IS_filtered.TimeZone = 'UTC';
+time_OS_filtered.TimeZone = 'UTC';
+
+% Converte realmente i timestamp in America/New_York (gestisce anche DST)
+time_IS_NY = time_IS_filtered;
+time_IS_NY.TimeZone = 'America/New_York';
+
+time_OS_NY = time_OS_filtered;
 time_OS_NY.TimeZone = 'America/New_York';
 
 % Keep the dates in the time window 9:00-16:00

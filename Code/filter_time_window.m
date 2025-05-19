@@ -1,4 +1,4 @@
-function [Rt_IS_NY_Filtered, Rt_OS_NY_Filtered] = filter_time_window(time_IS_NY, time_OS_NY, Rt_IS_filtered, Rt_OS_filtered, start_time, end_time, flag)
+function [IS_NY_Filtered, OS_NY_Filtered] = filter_time_window(time_IS_NY, time_OS_NY, Rt_IS_filtered, Rt_OS_filtered, start_time, end_time, flag)
 % FILTER_NY keeps only the values with a time between start_time and end_time.
 %
 % Inputs:
@@ -11,8 +11,8 @@ function [Rt_IS_NY_Filtered, Rt_OS_NY_Filtered] = filter_time_window(time_IS_NY,
 %   flag            - Binary flag to determine inclusion (true) or exclusion (false) of time window
 %
 % Outputs:
-%   Rt_IS_NY_Filtered - Table with filtered IS timestamps and Rt values
-%   Rt_OS_NY_Filtered - Table with filtered OS timestamps and Rt values
+%   IS_NY_Filtered - Table with filtered IS timestamps and Rt values
+%   OS_NY_Filtered - Table with filtered OS timestamps and Rt values
 
     if flag
         % --- CASE 1: KEEP DATA INSIDE [start_time, end_time] WINDOW ---
@@ -26,9 +26,9 @@ function [Rt_IS_NY_Filtered, Rt_OS_NY_Filtered] = filter_time_window(time_IS_NY,
         keep_OS = (T_OS_tod >= hours(start_time)) & (T_OS_tod <= hours(end_time)); 
 
         % Create output tables with filtered data
-        Rt_IS_NY_Filtered = table(time_IS_NY(keep_IS), Rt_IS_filtered(keep_IS), ...
+        IS_NY_Filtered = table(time_IS_NY(keep_IS), Rt_IS_filtered(keep_IS), ...
                 'VariableNames', {'Timestamp_NY', 'Rt_IS'});
-        Rt_OS_NY_Filtered = table(time_OS_NY(keep_OS), Rt_OS_filtered(keep_OS), ...
+        OS_NY_Filtered = table(time_OS_NY(keep_OS), Rt_OS_filtered(keep_OS), ...
                 'VariableNames', {'Timestamp_NY', 'Rt_OS'});
 
     else
@@ -44,9 +44,9 @@ function [Rt_IS_NY_Filtered, Rt_OS_NY_Filtered] = filter_time_window(time_IS_NY,
         keep_OS = (T_OS_tod <= hours(start_time)) | (T_OS_tod >= hours(end_time));   
 
         % Create output tables with filtered data
-        Rt_IS_NY_Filtered = table(time_IS_NY(keep_IS), Rt_IS_filtered(keep_IS), ...
+        IS_NY_Filtered = table(time_IS_NY(keep_IS), Rt_IS_filtered(keep_IS), ...
                 'VariableNames', {'Timestamp_NY', 'Rt_IS'});
-        Rt_OS_NY_Filtered = table(time_OS_NY(keep_OS), Rt_OS_filtered(keep_OS), ...
+        OS_NY_Filtered = table(time_OS_NY(keep_OS), Rt_OS_filtered(keep_OS), ...
                 'VariableNames', {'Timestamp_NY', 'Rt_OS'});
     end
 end
