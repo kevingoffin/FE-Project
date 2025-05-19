@@ -36,7 +36,7 @@ Rt = log(mid_HO ./ mid_LGO);
 % IS
 border_IS_OS = calmonths(9);
 Input_Format = 'yyyy-MM-dd HH:mm:ss';
-verbose = false;
+verbose = true;
 threshold_AntipersistentOutliers = 0.95;
 [Rt_IS, Rt_OS, time_IS, time_OS] = cleaner(Rt, timestamp, border_IS_OS, Input_Format, threshold_AntipersistentOutliers, verbose);
 
