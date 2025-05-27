@@ -1,7 +1,16 @@
 function [Rt_clean, time_clean, removed_idx] = removeAntipersistentOutliers(Rt, time, IQR)
     removed_idx = [];
     for t = 2:length(Rt)-1
-        if abs(Rt(t) - Rt(t-1)) > IQR && abs(Rt(t+1) - Rt(t)) >= 0.95 * IQR
+        delta_prev = Rt(t) - Rt(t-1);
+        delta_next = Rt(t+1) - Rt(t);
+        
+        % Condizione 1: salto iniziale > IQR
+        % Condizione 2: movimento successivo recupera almeno 95% del salto
+        % Condizione 3: movimento successivo è nella direzione opposta (corregge)
+        if abs(delta_prev) > IQR && ...               % Salto grande
+           abs(delta_next) >= 0.95*abs(delta_prev) && ... % Recupero almeno 95%
+           sign(delta_next) == -sign(delta_prev)      % Direzione opposta
+           
             removed_idx(end+1) = t;
         end
     end
