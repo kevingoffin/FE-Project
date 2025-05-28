@@ -1,62 +1,91 @@
 clear; clc;
 close all
 format long
-%% Question 1B
-tic
-% === Parametri OU ===
-theta = 0.041;
-sigma = 0.0147;   % std dev stazionaria
+%% Question 1B - Optimal Trading Bands Analysis
+% This section performs the optimization of trading bands for a statistical arbitrage strategy
+% using Ornstein-Uhlenbeck (OU) process parameters with stop-loss and transaction costs.
 
-% === Stop-loss (in S unit) ===
-l = -1.960;
+tic;  % Start timer to measure execution performance
 
-% === Transaction cost (in S unit) ===
-c_vals = linspace(0.001, 0.75, 100);
+% === OU Process Parameters ===
+theta = 0.041;        % Mean-reversion time scale (1/kappa) in years
+sigma = 0.0147;       % Stationary standard deviation (sigma/sqrt(2*kappa))
+                      % Represents the long-term volatility of the spread
 
-% === Leverage ===
-f = 1;
+% === Stop-loss Level ===
+% Expressed in standardized units (multiples of stationary standard deviation)
+l = -1.960;           % Corresponds to the 2.5% quantile in normal distribution
+                      % This is a conservative stop-loss level that triggers at 
+                      % approximately 1.96 standard deviations below the mean
+
+% === Transaction Cost Range ===
+% Create a vector of transaction costs to analyze (in sigma units)
+c_vals = linspace(0.001, 0.75, 100);  % From minimal cost to near maximum viable cost
+                                      % 100 points provides smooth visualization
+                                      % Upper bound of 0.75 is below critical cost c*
+
+% === Strategy Leverage ===
+f = 1;                % No leverage (investing 100% of capital)
+                      % f > 1 would indicate use of borrowed capital
+
+% === Optimize Trading Bands ===
+% Computes optimal entry (d) and exit (u) levels for each transaction cost
 [d_vals, u_vals] = maximize_mu(c_vals, l, sigma, theta, f);
+% Outputs:
+%   d_vals - Optimal entry levels (below mean)
+%   u_vals - Optimal exit levels (above mean)
 
-% === Plot risultati ===
-plot_BANDSvsCOST(c_vals, d_vals, u_vals,[],[],[],1);
-toc
-%% Question 2 
+% === Visualization ===
+flag_1b = true;       % Flag for basic plot mode (without critical cost markers)
+plot_BANDSvsCOST(c_vals, d_vals, u_vals, flag_1b);
+% The plot shows how optimal bands vary with transaction costs:
+% - Lower costs allow wider profitable bands
+% - Higher costs require tighter bands to remain profitable
 
-% Leggi il file Excel (salta le prime due righe di intestazione)
+elapsedTime = toc;
+fprintf('Execution time for Question 1B: %.4f seconds\n', elapsedTime);
+
+%% Question 2
+% Read Excel file (skip first two header rows)
 opts = detectImportOptions('HO-LGO.xlsm', 'Sheet', 'HO-LGO 30min');
-opts.DataRange = 'A3'; % Inizia dalla riga 3
+opts.DataRange = 'A3'; % Start from row 3
 T = readtable('HO-LGO.xlsm', opts);
 
-% Estrai le colonne di interesse
-% Timestamp, Bid HO, Ask HO, Bid LGO, Ask LGO
-[Rt, timestamp, bid_HO, bid_LGO, ask_HO, ask_LGO]= dataset_preparation(T);
-[Rt_IS_filtered, Rt_OS_filtered, time_IS_filtered, time_OS_filtered] = cleaner(Rt, timestamp, 9);
+% Extract columns of interest:
+% [Timestamp, HO Bid, HO Ask, LGO Bid, LGO Ask]
+column_timestamp = 2; columnBidHO = 3; columnBidLGO = 4; columnAskHO = 7; columnAskLGO = 8;
+converterHO = 42; converterLGO = 20/149;
+[Rt, timestamp, bid_HO, bid_LGO, ask_HO, ask_LGO, ~, ~] = extractionBidAskMidLogReturn(T, column_timestamp, columnBidHO, columnBidLGO, columnAskHO, columnAskLGO, converterHO, converterLGO);
+
+% Clean data and split into In-Sample (IS) and Out-of-Sample (OS) periods
+InputFormat = 'yyyy-MM-dd HH:mm:ss'; splitTime = calmonths(9); verbose = true;
+[Rt_filtered, time_filtered] = removeOutliers(Rt, timestamp, InputFormat, verbose);
+[Rt_IS_filtered, time_IS_filtered, Rt_OS_filtered, time_OS_filtered] = IS_OS_split(Rt_filtered, time_filtered, splitTime, verbose);
 
 %% Converting data to NY time 9:00-16:00
-
-% % Specifica esplicitamente che i timestamp sono in UTC
-time_IS_NY = time_IS_filtered;
-time_OS_NY = time_OS_filtered;
-flag = 1;
-[Rt_IS_NY_Filtered, Rt_OS_NY_Filtered] = filter_NY(time_IS_NY, time_OS_NY, Rt_IS_filtered, Rt_OS_filtered, 9, 16, flag);
+tic;
+% Specifica esplicitamente che i timestamp sono in UTC
+flag = true; verbose = true; starting_hour = 9; ending_hour = 16;
+[table_IS_Filtered_9_16] = filterTimeWindow(time_IS_filtered, Rt_IS_filtered, starting_hour, ending_hour, flag, verbose);
 
 % Calibration
-deltaT = 0.75/height(Rt_IS_NY_Filtered);
-[eta_hat, k_hat, sigma_hat] = calibration(Rt_IS_NY_Filtered, deltaT, 1);
+proportion = computeTimeProportion(timestamp(1), splitTime, timestamp(end)); % ISN'T BETTER TO DO THAT ?
+deltaT = 0.75/height(table_IS_Filtered_9_16); Rt_9_16 = table2array(table_IS_Filtered_9_16(:, 2));
+[eta_hat, k_hat, sigma_hat] = calibration(Rt_9_16, deltaT);
 
 % Process simulation
-Rt_0 = table2array(Rt_IS_NY_Filtered(:, 2));
 n_sim = 1e4;
 rng(42);
-[sigma_hat_i, k_hat_i, eta_hat_i] = simulation(Rt_0, n_sim, deltaT, eta_hat, k_hat, sigma_hat);
+[sigma_hat_i, k_hat_i, eta_hat_i] = simulation(Rt_9_16, n_sim, deltaT, eta_hat, k_hat, sigma_hat);
 
 % Confidence Intervals 95%
-ci_k     = prctile(k_hat_i,     [2.5, 97.5]);
-ci_sigma = prctile(sigma_hat_i, [2.5, 97.5]);
-ci_eta   = prctile(eta_hat_i,   [2.5, 97.5]);
 alpha=0.05;
-print_MLE_CI(k_hat, eta_hat, sigma_hat, alpha, ci_k, ci_sigma, ci_eta,k_hat_i, sigma_hat_i, eta_hat_i, 9 );
-
+ci_k     = prctile(k_hat_i,     [alpha * 50, 100 - alpha * 50]);
+ci_sigma = prctile(sigma_hat_i, [alpha * 50, 100 - alpha * 50]);
+ci_eta   = prctile(eta_hat_i,   [alpha * 50, 100 - alpha * 50]);
+print_MLE_CI(k_hat, eta_hat, sigma_hat, alpha, ci_k, ci_sigma, ci_eta, k_hat_i, sigma_hat_i, eta_hat_i, 9);
+elapsedTime = toc;
+fprintf('Execution time for Question 2: %.4f seconds\n\n', elapsedTime);
 %% Repeting with 8:00-16:00 NYT
 flag = 1;
 [Rt_IS_NY_Filtered, Rt_OS_NY_Filtered] = filter_NY(time_IS_NY, time_OS_NY, Rt_IS_filtered, Rt_OS_filtered, 8, 16, flag);
@@ -77,7 +106,7 @@ ci_sigma = prctile(sigma_hat_i, [2.5, 97.5]);
 ci_eta   = prctile(eta_hat_i,   [2.5, 97.5]);
 
 print_MLE_CI(k_hat, eta_hat, sigma_hat, alpha, ci_k, ci_sigma, ci_eta,k_hat_i, sigma_hat_i, eta_hat_i, 8)
-%% Question C
+%% Question 3
 flag = 1;
 [C, expected_C, SIGMA, c_bar, theta]=computeC(bid_HO, bid_LGO, ask_HO, ask_LGO, flag, timestamp, time_IS_NY,time_OS_NY, sigma_hat, k_hat);
 plot_c_histogram(C, SIGMA);
@@ -111,7 +140,6 @@ fprintf('Actual result over 12 month %.6f\n', ann_return)
 %fprintf('Actual result over 12 month with maximum transaction costs %.6f\n', ann_return_cmax)
 %% D
 %let's try with some leverage
-
 [opt_lev] = optimalLeverage(SIGMA, theta, c_bar, l, 100);
 f = [1,5,20, 28, opt_lev];
 mu_vector = zeros(length(f),1);
@@ -139,7 +167,6 @@ fprintf('95%% CI per mu:   [%.15f, %.15f]\n', ci_mu(1),   ci_mu(2));
 toc
 
 %% E
-
 l_vector = [-1.282, -1.645, -1.96, -2.326];
 f = 1;
 ann_pct_return_vector = zeros(length(l_vector), 1);
