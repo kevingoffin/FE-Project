@@ -1,4 +1,4 @@
-function [Rt_filtered, time_filtered] = removeOutliers(Rt, timestamp, InputFormat, verbose)
+function [Rt_filtered, time_filtered, index_mask] = removeOutliers(Rt, timestamp, InputFormat, verbose)
     % REMOVEOUTLIERS Filters statistical and antipersistent outliers from price spread data
     %
     % Processes financial time series data to:
@@ -14,6 +14,7 @@ function [Rt_filtered, time_filtered] = removeOutliers(Rt, timestamp, InputForma
     % Outputs:
     %   Rt_filtered   - Cleaned spread series with outliers removed
     %   time_filtered - Corresponding filtered timestamps
+    %   index_mask    - Index of the values that we removed
 
     %% Data Preparation
     % Convert string timestamps to datetime objects if needed
@@ -33,10 +34,6 @@ function [Rt_filtered, time_filtered] = removeOutliers(Rt, timestamp, InputForma
     
     % Create logical mask for inlier values
     is_inlier = (Rt >= lower_bound) & (Rt <= upper_bound);
-    
-    % Apply statistical outlier filter
-    Rt_filtered = Rt(is_inlier);
-    time_filtered = timestamp(is_inlier);
     
     if verbose
         % Identify and store outliers before removal
@@ -74,10 +71,10 @@ function [Rt_filtered, time_filtered] = removeOutliers(Rt, timestamp, InputForma
     
     %% Phase 2: Antipersistent Outlier Detection
     % Calculate price changes between consecutive points
-    price_changes = diff(Rt_filtered);  % Rt(t) - Rt(t-1)
+    price_changes = diff(Rt);  % Rt(t) - Rt(t-1)
     
     % Identify antipersistent spikes (large changes that immediately reverse)
-    is_spike = false(size(Rt_filtered));  % Initialize detection mask
+    is_spike = false(size(Rt));  % Initialize detection mask
     
     % Conditions for antipersistent outliers (applied to middle points only):
     % 1. Initial change exceeds IQR threshold
@@ -92,14 +89,15 @@ function [Rt_filtered, time_filtered] = removeOutliers(Rt, timestamp, InputForma
 
     % Identify and store antipersistent outliers before removal
     if verbose
-        spike_values = Rt_filtered(is_spike);
-        spike_times = time_filtered(is_spike);
+        spike_values = Rt(is_spike);
+        spike_times = timestamp(is_spike);
         spike_indices = find(is_spike);  % Get original indices
     end
     
     % Remove detected antipersistent outliers
-    Rt_filtered = Rt_filtered(~is_spike);
-    time_filtered = time_filtered(~is_spike);
+    index_mask = ~is_spike & is_inlier;
+    Rt_filtered = Rt(index_mask);
+    time_filtered = timestamp(index_mask);
     
     if verbose
         % Report number of antipersistent outliers removed

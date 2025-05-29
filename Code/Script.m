@@ -1,7 +1,7 @@
 clear; clc;
 close all
 format long
-%% Question 1B - Optimal Trading Bands Analysis
+%% Question A - Optimal Trading Bands Analysis
 % This section performs the optimization of trading bands for a statistical arbitrage strategy
 % using Ornstein-Uhlenbeck (OU) process parameters with stop-loss and transaction costs.
 
@@ -36,8 +36,8 @@ f = 1;                % No leverage (investing 100% of capital)
 %   u_vals - Optimal exit levels (above mean)
 
 % === Visualization ===
-flag_1b = true;       % Flag for basic plot mode (without critical cost markers)
-plot_BANDSvsCOST(c_vals, d_vals, u_vals, flag_1b);
+flag = true;       % Flag for basic plot mode (without critical cost markers)
+plot_BANDSvsCOST(c_vals, d_vals, u_vals, flag);
 % The plot shows how optimal bands vary with transaction costs:
 % - Lower costs allow wider profitable bands
 % - Higher costs require tighter bands to remain profitable
@@ -45,7 +45,7 @@ plot_BANDSvsCOST(c_vals, d_vals, u_vals, flag_1b);
 elapsedTime = toc;
 fprintf('Execution time for Question 1B: %.4f seconds\n', elapsedTime);
 
-%% Question 2
+%% Question B
 % Read Excel file (skip first two header rows)
 opts = detectImportOptions('HO-LGO.xlsm', 'Sheet', 'HO-LGO 30min');
 opts.DataRange = 'A3'; % Start from row 3
@@ -59,7 +59,7 @@ converterHO = 42; converterLGO = 20/149;
 
 % Clean data and split into In-Sample (IS) and Out-of-Sample (OS) periods
 InputFormat = 'yyyy-MM-dd HH:mm:ss'; splitTime = calmonths(9); verbose = true;
-[Rt_filtered, time_filtered] = removeOutliers(Rt, timestamp, InputFormat, verbose);
+[Rt_filtered, time_filtered, index_filtered] = removeOutliers(Rt, timestamp, InputFormat, verbose);
 [Rt_IS_filtered, time_IS_filtered, Rt_OS_filtered, time_OS_filtered] = IS_OS_split(Rt_filtered, time_filtered, splitTime, verbose);
 
 %% Converting data to NY time 9:00-16:00
@@ -69,12 +69,13 @@ flag = true; verbose = true; starting_hour = 9; ending_hour = 16;
 [table_IS_Filtered_9_16] = filterTimeWindow(time_IS_filtered, Rt_IS_filtered, starting_hour, ending_hour, flag, verbose);
 
 % Calibration
-proportion = computeTimeProportion(timestamp(1), splitTime, timestamp(end)); % ISN'T BETTER TO DO THAT ?
-deltaT = 0.75/height(table_IS_Filtered_9_16); Rt_9_16 = table2array(table_IS_Filtered_9_16(:, 2));
+proportion = computeTimeProportion(timestamp(1), splitTime, timestamp(end));
+deltaT = proportion/height(table_IS_Filtered_9_16); Rt_9_16 = table2array(table_IS_Filtered_9_16(:, 2));
 [eta_hat, k_hat, sigma_hat] = calibration(Rt_9_16, deltaT);
 
 % Process simulation
 n_sim = 1e4;
+%n_sim = 1e3;
 rng(42);
 [sigma_hat_i, k_hat_i, eta_hat_i] = simulation(Rt_9_16, n_sim, deltaT, eta_hat, k_hat, sigma_hat);
 
@@ -83,32 +84,35 @@ alpha=0.05;
 ci_k     = prctile(k_hat_i,     [alpha * 50, 100 - alpha * 50]);
 ci_sigma = prctile(sigma_hat_i, [alpha * 50, 100 - alpha * 50]);
 ci_eta   = prctile(eta_hat_i,   [alpha * 50, 100 - alpha * 50]);
-print_MLE_CI(k_hat, eta_hat, sigma_hat, alpha, ci_k, ci_sigma, ci_eta, k_hat_i, sigma_hat_i, eta_hat_i, 9);
+print_MLE_CI(k_hat, eta_hat, sigma_hat, alpha, ci_k, ci_sigma, ci_eta, k_hat_i, sigma_hat_i, eta_hat_i, starting_hour, ending_hour);
 elapsedTime = toc;
 fprintf('Execution time for Question 2: %.4f seconds\n\n', elapsedTime);
-%% Repeting with 8:00-16:00 NYT
-flag = 1;
-[Rt_IS_NY_Filtered, Rt_OS_NY_Filtered] = filter_NY(time_IS_NY, time_OS_NY, Rt_IS_filtered, Rt_OS_filtered, 8, 16, flag);
+%% Converting data to NY time 8:00-16:00
+tic;
+% Specifica esplicitamente che i timestamp sono in UTC
+flag = true; verbose = true; starting_hour = 8; ending_hour = 16;
+[table_IS_Filtered_8_16] = filterTimeWindow(time_IS_filtered, Rt_IS_filtered, starting_hour, ending_hour, flag, verbose);
 
 % Calibration
-deltaT = 0.75/height(Rt_IS_NY_Filtered);
-[eta_hat, k_hat, sigma_hat] = calibration(Rt_IS_NY_Filtered, deltaT, 1);
+proportion = computeTimeProportion(timestamp(1), splitTime, timestamp(end));
+deltaT = proportion/height(table_IS_Filtered_8_16); Rt_8_16 = table2array(table_IS_Filtered_8_16(:, 2));
+[eta_hat, k_hat, sigma_hat] = calibration(Rt_8_16, deltaT);
 
 % Process simulation
-Rt_0 = table2array(Rt_IS_NY_Filtered(:, 2));
-n_sim = 100;
+n_sim = 1e2;
 rng(42);
-[sigma_hat_i, k_hat_i, eta_hat_i] = simulation(Rt_0, n_sim, deltaT, eta_hat, k_hat, sigma_hat);
+[sigma_hat_i, k_hat_i, eta_hat_i] = simulation(Rt_8_16, n_sim, deltaT, eta_hat, k_hat, sigma_hat);
 
 % Confidence Intervals 95%
-ci_k     = prctile(k_hat_i,     [2.5, 97.5]);
-ci_sigma = prctile(sigma_hat_i, [2.5, 97.5]);
-ci_eta   = prctile(eta_hat_i,   [2.5, 97.5]);
-
-print_MLE_CI(k_hat, eta_hat, sigma_hat, alpha, ci_k, ci_sigma, ci_eta,k_hat_i, sigma_hat_i, eta_hat_i, 8)
-%% Question 3
-flag = 1;
-[C, expected_C, SIGMA, c_bar, theta]=computeC(bid_HO, bid_LGO, ask_HO, ask_LGO, flag, timestamp, time_IS_NY,time_OS_NY, sigma_hat, k_hat);
+alpha=0.05;
+ci_k     = prctile(k_hat_i,     [alpha * 50, 100 - alpha * 50]);
+ci_sigma = prctile(sigma_hat_i, [alpha * 50, 100 - alpha * 50]);
+ci_eta   = prctile(eta_hat_i,   [alpha * 50, 100 - alpha * 50]);
+print_MLE_CI(k_hat, eta_hat, sigma_hat, alpha, ci_k, ci_sigma, ci_eta, k_hat_i, sigma_hat_i, eta_hat_i, starting_hour, ending_hour);
+elapsedTime = toc;
+fprintf('Execution time for Question 2: %.4f seconds\n\n', elapsedTime);
+%% Question C
+[C, expected_C, SIGMA, c_bar, theta] = computeTransactionCost(bid_HO, bid_LGO, ask_HO, ask_LGO, timestamp, sigma_hat, k_hat, starting_hour, ending_hour, splitTime, index_filtered);
 plot_c_histogram(C, SIGMA);
 
 % === Stop-loss fisso (in unità di S) ===
@@ -120,51 +124,50 @@ f=1;
 [u_star, d_star] = bands(c_bar, l, SIGMA, theta, f);
 
 % === Plot risultati ===
-flag = 2;
+flag = false;
 plot_BANDSvsCOST(c_vals, d_vals, u_vals, c_bar, d_star, u_star, flag)
-[Rt_IS_NY_Filtered, Rt_OS_NY_Filtered] = filter_NY(time_IS_NY, time_OS_NY, Rt_IS_filtered, Rt_OS_filtered, 17, 20, flag);
+
+% Exclude the time window 17:00-20:00
+flag = false; verbose = true; starting_hour = 17; ending_hour = 20;
+[table_OS_Filtered_17_20] = filterTimeWindow(time_OS_filtered, Rt_OS_filtered, starting_hour, ending_hour, flag, verbose);
 
 %% testing on OS dataset
+tic
  % normalization at regime
-X_OS = (table2array(Rt_OS_NY_Filtered(:,2)) - eta_hat)/SIGMA; 
+X_OS = (table2array(table_OS_Filtered_17_20(:,2)) - eta_hat)/SIGMA; 
 plot_XOS(X_OS, d_star, u_star, l);
-[C_max, p_pls, p_mns]=maximum_transaction_cost(d_star, u_star, l)
-f = 1;
-[ann_return] = billionaire(X_OS, d_star, u_star, l, c_bar, SIGMA, f, 4);
+w0 = 1;
+[C_max, p_pls, p_mns] = maximum_transaction_cost(d_star, u_star, l);
+f = 1; scaling_factor = 4; verbose = false;
+ann_return = optimizedReturn(X_OS, d_star, u_star, l, c_bar, SIGMA, f, scaling_factor, w0, verbose);
 value = evaluate_mu(d_star, u_star, c_bar, theta, l, SIGMA, f);
 
 fprintf('probabilities and sum [%.6f, %.6f, %.6f]\n', p_pls,  p_mns, p_pls + p_mns)
 fprintf('Expected theorical result over 1 year %.6f \n', value)
 fprintf('actual transaction cost normalized %.6f\n', c_bar)
 fprintf('Actual result over 12 month %.6f\n', ann_return)
-%fprintf('Actual result over 12 month with maximum transaction costs %.6f\n', ann_return_cmax)
+toc
+
 %% D
 %let's try with some leverage
 [opt_lev] = optimalLeverage(SIGMA, theta, c_bar, l, 100);
-f = [1,5,20, 28, opt_lev];
-mu_vector = zeros(length(f),1);
-rtn = zeros(length(f),1);
-u_star_vec=zeros(length(f),1);
-d_star_vec=zeros(length(f),1);
-for j=1:length(f)
-    [u_star_lev, d_star_lev] = bands(c_bar, l, SIGMA, theta, f(j));
-    u_star_vec(j)=u_star_lev; d_star_vec(j)=d_star_lev;
-    mu_vector(j) = evaluate_mu(d_star_vec(j), u_star_vec(j), c_bar, theta, l, SIGMA, f(j))*100;
-    rtn(j) = billionaire(X_OS, d_star_vec(j), u_star_vec(j), l, c_bar, SIGMA, f(j), 4);
-    %fprintf('Expected theorical result over 1 year %.6f %% \n', mu(d_star, u_star, c_bar)*100)
-end
+f = [1, 5, 20, 28, opt_lev];
+[u_star_vec, d_star_vec] = bands(c_bar, l, SIGMA, theta, f);
+mu_vector = evaluate_mu(d_star_vec, u_star_vec, c_bar, theta, l, SIGMA, f)*100;
+rtn = optimizedReturn(X_OS, d_star_vec, u_star_vec, l, c_bar, SIGMA, f, scaling_factor, w0, verbose);
 plot_leveragesVSreturns(f, rtn, opt_lev, mu_vector);
 
 %%
-tic
-[ci_d, ci_u, ci_mu] = confidenceIntervalAdv(sigma_hat_i, k_hat_i, l, expected_C, opt_lev);
+tic;
+alpha = 0.05; CostUpperBound = 0.75;
+[ci_d, ci_u, ci_mu] = confidenceIntervalAdv(sigma_hat_i, k_hat_i, l, expected_C, opt_lev, alpha, CostUpperBound);
 
 fprintf('d, u, mu: [%.15f, %.15f, %.15f]\n', d_star, u_star, value);
 fprintf('===Confidence intervals for d,u,mu===\n')
 fprintf('95%% CI per d :     [%.15f, %.15f]\n', ci_d(1),     ci_d(2));
 fprintf('95%% CI per u: [%.15f, %.15f]\n', ci_u(1), ci_u(2));
 fprintf('95%% CI per mu:   [%.15f, %.15f]\n', ci_mu(1),   ci_mu(2));
-toc
+toc;
 
 %% E
 l_vector = [-1.282, -1.645, -1.96, -2.326];
@@ -172,7 +175,7 @@ f = 1;
 ann_pct_return_vector = zeros(length(l_vector), 1);
 for i=1:length(l_vector)
     [u_star, d_star, ~] = bands(c_bar, l_vector(i), SIGMA, theta, f);
-    ann_pct_return_vector(i) = billionaire(X_OS, d_star, u_star, l_vector(i), c_bar, SIGMA, f, 4);
+    ann_pct_return_vector(i) = optimizedReturn(X_OS, d_star, u_star, l_vector(i), c_bar, SIGMA, f, scaling_factor, w0, verbose);
 end
 figure;
 plot(l_vector, ann_pct_return_vector)
@@ -254,61 +257,52 @@ c_vals = linspace(0.001, 1.00, 100);
 [d_vals_pair_1, u_vals_pair_1, d_star_pair_1, u_star_pair_1, c_bar_pair_1, SIGMA_pair_1, theta_pair_1, expected_C_pair_1] = pair_futures(mid_RXA, mid_IKA, sigma_hat_pair_1, k_hat_pair_1, l, f, c_vals);
 [d_vals_pair_2, u_vals_pair_2, d_star_pair_2, u_star_pair_2, c_bar_pair_2, SIGMA_pair_2, theta_pair_2, expected_C_pair_2] = pair_futures(mid_OATA, mid_OEA, sigma_hat_pair_2, k_hat_pair_2, l, f, c_vals);
  
+% === Plot risultati ===
+figure;
+plot(c_vals, -d_vals_pair_1, 'r-', 'LineWidth', 1.5); hold on;
+plot(c_vals, u_vals_pair_1, 'b--', 'LineWidth', 1.5); hold on;
+xline(c_bar_pair_1, 'green--', 'LineWidth', 1.5); hold on;
+x = [c_bar_pair_1,   c_bar_pair_1];
+y = [-d_star_pair_1, u_star_pair_1];
+plot(x, y, 'o', 'MarkerEdgeColor','c','MarkerFaceColor','c','LineWidth',1.5);
+xlabel('Transaction cost c (in S units)');
+ylabel('Optimal trading bands');
+legend('|d^*|','u^*','Location','NorthWest');
+title('Figure 3 – Optimal bands vs. transaction cost');
+grid on;
+
  % === Plot risultati ===
- figure;
- plot(c_vals, -d_vals_pair_1, 'r-', 'LineWidth', 1.5); hold on;
- plot(c_vals, u_vals_pair_1, 'b--', 'LineWidth', 1.5); hold on;
- xline(c_bar_pair_1, 'green--', 'LineWidth', 1.5); hold on;
- x = [c_bar_pair_1,   c_bar_pair_1];
- y = [-d_star_pair_1, u_star_pair_1];
- plot(x, y, 'o', 'MarkerEdgeColor','c','MarkerFaceColor','c','LineWidth',1.5);
- xlabel('Transaction cost c (in S units)');
- ylabel('Optimal trading bands');
- legend('|d^*|','u^*','Location','NorthWest');
- title('Figure 3 – Optimal bands vs. transaction cost');
- grid on;
-
-  % === Plot risultati ===
- figure;
- plot(c_vals, -d_vals_pair_2, 'r-', 'LineWidth', 1.5); hold on;
- plot(c_vals, u_vals_pair_2, 'b--', 'LineWidth', 1.5); hold on;
- xline(c_bar_pair_2, 'green--', 'LineWidth', 1.5); hold on;
- x = [c_bar_pair_2,   c_bar_pair_2];
- y = [-d_star_pair_2, u_star_pair_2];
- plot(x, y, 'o', 'MarkerEdgeColor','c','MarkerFaceColor','c','LineWidth',1.5);
- xlabel('Transaction cost c (in S units)');
- ylabel('Optimal trading bands');
- legend('|d^*|','u^*','Location','NorthWest');
- title('Figure 3 – Optimal bands vs. transaction cost');
- grid on;
-
+figure;
+plot(c_vals, -d_vals_pair_2, 'r-', 'LineWidth', 1.5); hold on;
+plot(c_vals, u_vals_pair_2, 'b--', 'LineWidth', 1.5); hold on;
+xline(c_bar_pair_2, 'green--', 'LineWidth', 1.5); hold on;
+x = [c_bar_pair_2,   c_bar_pair_2];
+y = [-d_star_pair_2, u_star_pair_2];
+plot(x, y, 'o', 'MarkerEdgeColor','c','MarkerFaceColor','c','LineWidth',1.5);
+xlabel('Transaction cost c (in S units)');
+ylabel('Optimal trading bands');
+legend('|d^*|','u^*','Location','NorthWest');
+title('Figure 3 – Optimal bands vs. transaction cost');
+grid on;
 
 flag = 2;
 [Rt_pair_1_IS_filtered, Rt_OS_1_Filtered] = filter_NY(time_new_IS_cleaned, time_new_OS, Rt_pair_1_IS_cleaned, Rt_pair_1_OS, 17, 20, flag);
 [Rt_pair_2_IS_filtered, Rt_OS_2_Filtered] = filter_NY(time_new_IS_cleaned, time_new_OS, Rt_pair_2_IS_cleaned, Rt_pair_2_OS, 17, 20, flag);
  
- %% testing on OS dataset
-
+%% testing on OS dataset
 flag = 1;
 n = 6;
 
 [X_OS_pair_1, value_pair_1, ann_pct_return_pair_1] = long_run_futures(Rt_OS_1_Filtered, eta_hat_pair_1, theta_pair_1, SIGMA_pair_1, u_star_pair_1, d_star_pair_1, l, c_bar_pair_1, f);
-
 [X_OS_pair_2, value_pair_2, ann_pct_return_pair_2] = long_run_futures(Rt_OS_2_Filtered, eta_hat_pair_2, theta_pair_2, SIGMA_pair_2, u_star_pair_2, d_star_pair_2, l, c_bar_pair_2, f);
 
-
- 
 %% G.D
 
 %let's try with some leverage
 f_max = 20;
 [opt_lev_pair_1, rtn_pair_1, mu_vector_pair_1] = run_leverage(X_OS_pair_1, SIGMA_pair_1, theta_pair_1, c_bar_pair_1, l, f_max, sigma_hat_i_pair_1, k_hat_i_pair_1, expected_C_pair_1, d_star_pair_1, u_star_pair_1, value_pair_1);
-
 [opt_lev_pair_2, rtn_pair_2, mu_vector_pair_2] = run_leverage(X_OS_pair_2, SIGMA_pair_2, theta_pair_2, c_bar_pair_2, l, f_max, sigma_hat_i_pair_2, k_hat_i_pair_2, expected_C_pair_2, d_star_pair_2, u_star_pair_2, value_pair_2);
 
 %% G.E
-
 [ann_return_vector_pair_1] = run_stop_loss(X_OS_pair_1, d_star_pair_1, u_star_pair_1, c_bar_pair_1, SIGMA_pair_1, theta_pair_1);
-
-
 [ann_return_vector_pair_2] = run_stop_loss(X_OS_pair_2, d_star_pair_2, u_star_pair_2, c_bar_pair_2, SIGMA_pair_2, theta_pair_2);
