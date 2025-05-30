@@ -2,7 +2,7 @@ function [opt_lev, rtn, mu_vector] = run_leverage(X_OS, SIGMA, theta, c_bar, l, 
 
     [opt_lev] = optimalLeverage(SIGMA, theta, c_bar, l, f_max);
     
-    f = [1,5,10, opt_lev, 28, 35, 50, 65, 75, 90, 120, 150, 200, 250, 300, 400, 600];
+    f = [1, 5, 10, opt_lev, 28, 35, 50, 65, 75, 90, 120, 150, 200, 250, 300, 400, 600];
     mu_vector = zeros(length(f),1);
     rtn = zeros(length(f),1);
     for j=1:length(f)

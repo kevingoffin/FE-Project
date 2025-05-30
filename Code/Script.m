@@ -43,9 +43,10 @@ plot_BANDSvsCOST(c_vals, d_vals, u_vals, flag);
 % - Higher costs require tighter bands to remain profitable
 
 elapsedTime = toc;
-fprintf('Execution time for Question 1B: %.4f seconds\n', elapsedTime);
+fprintf('Execution time for Question A: %.4f seconds\n', elapsedTime);
 
 %% Question B
+tic;
 % Read Excel file (skip first two header rows)
 opts = detectImportOptions('HO-LGO.xlsm', 'Sheet', 'HO-LGO 30min');
 opts.DataRange = 'A3'; % Start from row 3
@@ -53,9 +54,9 @@ T = readtable('HO-LGO.xlsm', opts);
 
 % Extract columns of interest:
 % [Timestamp, HO Bid, HO Ask, LGO Bid, LGO Ask]
-column_timestamp = 2; columnBidHO = 3; columnBidLGO = 4; columnAskHO = 7; columnAskLGO = 8;
+column_timestamp = 2; columnHO = [3, 7]; columnLGO = [4, 8];
 converterHO = 42; converterLGO = 20/149;
-[Rt, timestamp, bid_HO, bid_LGO, ask_HO, ask_LGO, ~, ~] = extractionBidAskMidLogReturn(T, column_timestamp, columnBidHO, columnBidLGO, columnAskHO, columnAskLGO, converterHO, converterLGO);
+[Rt, timestamp, ~, ~, bid_HO, bid_LGO, ask_HO, ask_LGO] = extractionBidAskMidLogReturn(T, column_timestamp, columnHO, columnLGO, converterHO, converterLGO, flag);
 
 % Clean data and split into In-Sample (IS) and Out-of-Sample (OS) periods
 InputFormat = 'yyyy-MM-dd HH:mm:ss'; splitTime = calmonths(9); verbose = true;
@@ -63,8 +64,7 @@ InputFormat = 'yyyy-MM-dd HH:mm:ss'; splitTime = calmonths(9); verbose = true;
 [Rt_IS_filtered, time_IS_filtered, Rt_OS_filtered, time_OS_filtered] = IS_OS_split(Rt_filtered, time_filtered, splitTime, verbose);
 
 %% Converting data to NY time 9:00-16:00
-tic;
-% Specifica esplicitamente che i timestamp sono in UTC
+% Filter in a specific time window
 flag = true; verbose = true; starting_hour = 9; ending_hour = 16;
 [table_IS_Filtered_9_16] = filterTimeWindow(time_IS_filtered, Rt_IS_filtered, starting_hour, ending_hour, flag, verbose);
 
@@ -75,7 +75,6 @@ deltaT = proportion/height(table_IS_Filtered_9_16); Rt_9_16 = table2array(table_
 
 % Process simulation
 n_sim = 1e4;
-%n_sim = 1e3;
 rng(42);
 [sigma_hat_i, k_hat_i, eta_hat_i] = simulation(Rt_9_16, n_sim, deltaT, eta_hat, k_hat, sigma_hat);
 
@@ -85,11 +84,9 @@ ci_k     = prctile(k_hat_i,     [alpha * 50, 100 - alpha * 50]);
 ci_sigma = prctile(sigma_hat_i, [alpha * 50, 100 - alpha * 50]);
 ci_eta   = prctile(eta_hat_i,   [alpha * 50, 100 - alpha * 50]);
 print_MLE_CI(k_hat, eta_hat, sigma_hat, alpha, ci_k, ci_sigma, ci_eta, k_hat_i, sigma_hat_i, eta_hat_i, starting_hour, ending_hour);
-elapsedTime = toc;
-fprintf('Execution time for Question 2: %.4f seconds\n\n', elapsedTime);
+
 %% Converting data to NY time 8:00-16:00
-tic;
-% Specifica esplicitamente che i timestamp sono in UTC
+% Filter in a specific time window
 flag = true; verbose = true; starting_hour = 8; ending_hour = 16;
 [table_IS_Filtered_8_16] = filterTimeWindow(time_IS_filtered, Rt_IS_filtered, starting_hour, ending_hour, flag, verbose);
 
@@ -99,7 +96,7 @@ deltaT = proportion/height(table_IS_Filtered_8_16); Rt_8_16 = table2array(table_
 [eta_hat, k_hat, sigma_hat] = calibration(Rt_8_16, deltaT);
 
 % Process simulation
-n_sim = 1e2;
+n_sim = 1e4;
 rng(42);
 [sigma_hat_i, k_hat_i, eta_hat_i] = simulation(Rt_8_16, n_sim, deltaT, eta_hat, k_hat, sigma_hat);
 
@@ -109,131 +106,272 @@ ci_k     = prctile(k_hat_i,     [alpha * 50, 100 - alpha * 50]);
 ci_sigma = prctile(sigma_hat_i, [alpha * 50, 100 - alpha * 50]);
 ci_eta   = prctile(eta_hat_i,   [alpha * 50, 100 - alpha * 50]);
 print_MLE_CI(k_hat, eta_hat, sigma_hat, alpha, ci_k, ci_sigma, ci_eta, k_hat_i, sigma_hat_i, eta_hat_i, starting_hour, ending_hour);
+
+% Time elapsed
 elapsedTime = toc;
-fprintf('Execution time for Question 2: %.4f seconds\n\n', elapsedTime);
-%% Question C
-[C, expected_C, SIGMA, c_bar, theta] = computeTransactionCost(bid_HO, bid_LGO, ask_HO, ask_LGO, timestamp, sigma_hat, k_hat, starting_hour, ending_hour, splitTime, index_filtered);
+fprintf('Execution time for Question B: %.4f seconds\n', elapsedTime);
+
+%% === Question C: Trading Cost and Strategy Analysis ===
+tic;
+% Compute transaction costs and key strategy parameters
+[C, expected_C, SIGMA, c_bar, theta] = computeTransactionCost(...
+    bid_HO, bid_LGO, ask_HO, ask_LGO, timestamp, ...
+    sigma_hat, k_hat, starting_hour, ending_hour, splitTime, index_filtered);
+
+% Visualize transaction cost distribution relative to volatility
 plot_c_histogram(C, SIGMA);
 
-% === Stop-loss fisso (in unità di S) ===
-l = -1.96;
+% === Strategy Parameters ===
+% Set stop-loss threshold at -1.96 standard deviations
+% (Common choice for 95% confidence interval in normal distributions)
+l = -1.96;  % Stop-loss level in volatility units (σ)
 
-% === Costi di transazione (in unità di S) ===
+% === Transaction Cost Sensitivity Analysis ===
+% Define range of normalized transaction costs to evaluate
+% (From 0.1% to 75% of volatility, 100 points)
 c_vals = linspace(0.001, 0.75, 100);
-f=1;
+
+% Assume full position sizing (f=1 means 100% of capital per trade)
+f = 1;
+
+% Compute optimal trading bands (u*, d*) for given parameters
 [u_star, d_star] = bands(c_bar, l, SIGMA, theta, f);
 
-% === Plot risultati ===
-flag = false;
-plot_BANDSvsCOST(c_vals, d_vals, u_vals, c_bar, d_star, u_star, flag)
+% === Visualize Optimal Bands vs Transaction Costs ===
+% Plot relationship between costs and trading thresholds
+% flag=false: Disables saving the plot to file
+plot_BANDSvsCOST(c_vals, d_vals, u_vals, c_bar, d_star, u_star, false)
 
-% Exclude the time window 17:00-20:00
-flag = false; verbose = true; starting_hour = 17; ending_hour = 20;
-[table_OS_Filtered_17_20] = filterTimeWindow(time_OS_filtered, Rt_OS_filtered, starting_hour, ending_hour, flag, verbose);
+% === After-Hours Market Analysis ===
+% Filter and analyze trading activity during 17:00-20:00 time window
+% flag=false: Returns filtered data without plotting 
+% verbose=true: Displays filtering statistics
+[table_OS_Filtered_17_20] = filterTimeWindow(...
+    time_OS_filtered, Rt_OS_filtered, ...
+    17, 20, false, true);  % 17:00 to 20:00 time window
 
-%% testing on OS dataset
-tic
- % normalization at regime
-X_OS = (table2array(table_OS_Filtered_17_20(:,2)) - eta_hat)/SIGMA; 
+%% Testing on Out-of-Sample (OS) Dataset
+% === 1. Normalize the OS time series using regime-estimated parameters ===
+% Subtract long-term mean (eta_hat) and divide by stationary volatility (SIGMA)
+X_OS = (table2array(table_OS_Filtered_17_20(:,2)) - eta_hat) / SIGMA;
+
+% === 2. Plot OS signal with optimal trading thresholds ===
 plot_XOS(X_OS, d_star, u_star, l);
+
+% === 3. Initialize wealth ===
 w0 = 1;
+
+% === 4. Compute max admissible transaction cost from thresholds ===
+% This is useful to check whether current cost is within feasible region
 [C_max, p_pls, p_mns] = maximum_transaction_cost(d_star, u_star, l);
-f = 1; scaling_factor = 4; verbose = false;
+
+% === 5. Set trading parameters ===
+f = 1;                     % Leverage factor
+scaling_factor = 4;        % Number of strategy cycles per year (quarterly strategy)
+verbose = false;           % Suppress verbose output
+
+% === 6. Simulate actual trading strategy on OS data ===
+% Computes the annualized return of the strategy using historical OS path
 ann_return = optimizedReturn(X_OS, d_star, u_star, l, c_bar, SIGMA, f, scaling_factor, w0, verbose);
+
+% === 7. Compute expected theoretical return using the OU model ===
+% μ* as derived from the OU-based expected value formula
 value = evaluate_mu(d_star, u_star, c_bar, theta, l, SIGMA, f);
 
-fprintf('probabilities and sum [%.6f, %.6f, %.6f]\n', p_pls,  p_mns, p_pls + p_mns)
-fprintf('Expected theorical result over 1 year %.6f \n', value)
-fprintf('actual transaction cost normalized %.6f\n', c_bar)
-fprintf('Actual result over 12 month %.6f\n', ann_return)
-toc
+% === 8. Print diagnostic metrics ===
+% Display hitting probabilities and return estimates for evaluation
+fprintf('Probabilities and sum [%.6f, %.6f, %.6f]\n', p_pls, p_mns, p_pls + p_mns);
+fprintf('Expected theoretical result over 1 year: %.6f\n', value);
+fprintf('Actual transaction cost (normalized): %.6f\n', c_bar);
+fprintf('Actual result over 12 months: %.6f\n', ann_return);
 
-%% D
-%let's try with some leverage
-[opt_lev] = optimalLeverage(SIGMA, theta, c_bar, l, 100);
-f = [1, 5, 20, 28, opt_lev];
-[u_star_vec, d_star_vec] = bands(c_bar, l, SIGMA, theta, f);
-mu_vector = evaluate_mu(d_star_vec, u_star_vec, c_bar, theta, l, SIGMA, f)*100;
-rtn = optimizedReturn(X_OS, d_star_vec, u_star_vec, l, c_bar, SIGMA, f, scaling_factor, w0, verbose);
-plot_leveragesVSreturns(f, rtn, opt_lev, mu_vector);
+elapsedTime = toc;
+fprintf('Execution time for Question C: %.4f seconds\n', elapsedTime);
 
-%%
+%% Question D
 tic;
-alpha = 0.05; CostUpperBound = 0.75;
-[ci_d, ci_u, ci_mu] = confidenceIntervalAdv(sigma_hat_i, k_hat_i, l, expected_C, opt_lev, alpha, CostUpperBound);
+% === 1. Compute Optimal Leverage ===
+% This finds the theoretical leverage that maximizes expected return
+opt_lev = optimalLeverage(SIGMA, theta, c_bar, l, 100);  % Grid of 100 points
 
+% === 2. Define Leverage Levels for Evaluation ===
+% Try different leverage levels including the optimal one
+leverage_levels = [1, 5, 20, 28, opt_lev];  % Test a wide range including edge and optimal
+
+% === 3. Compute Optimal Trading Bands for Each Leverage ===
+% Returns upper and lower thresholds for each leverage value
+[u_star_vec, d_star_vec] = bands(c_bar, l, SIGMA, theta, leverage_levels);
+
+% === 4. Compute Theoretical Returns ===
+% Evaluate μ(f) using analytical expression for OU-based model
+% Multiply by 100 to express in annual percentage terms
+mu_vector = evaluate_mu(d_star_vec, u_star_vec, c_bar, theta, l, SIGMA, leverage_levels) * 100;
+
+% === 5. Compute Empirical (Simulated) Returns on OS Data ===
+% Simulates each strategy using the OS time series
+empirical_returns = optimizedReturn(X_OS, d_star_vec, u_star_vec, l, ...
+                                    c_bar, SIGMA, leverage_levels, ...
+                                    scaling_factor, w0, verbose);
+
+% === 6. Plot Theoretical vs. Empirical Returns vs. Leverage ===
+plot_leveragesVSreturns(leverage_levels, empirical_returns, opt_lev, mu_vector);
+
+
+% === Confidence Interval Computation for Trading Parameters ===% Set confidence level and upper bound for cost grid
+alpha = 0.05;               % Significance level for 95% confidence interval
+CostUpperBound = 0.75;      % Upper limit for transaction cost search space
+
+% Compute 95% confidence intervals for d*, u*, and μ* 
+% using bootstrapped estimates of sigma and kappa
+[ci_d, ci_u, ci_mu] = confidenceIntervalAdv(sigma_hat_i, k_hat_i, ...
+                                            l, expected_C, opt_lev, ...
+                                            alpha, CostUpperBound);
+
+% Print point estimates of d*, u*, and μ* (from main optimization path)
 fprintf('d, u, mu: [%.15f, %.15f, %.15f]\n', d_star, u_star, value);
-fprintf('===Confidence intervals for d,u,mu===\n')
-fprintf('95%% CI per d :     [%.15f, %.15f]\n', ci_d(1),     ci_d(2));
-fprintf('95%% CI per u: [%.15f, %.15f]\n', ci_u(1), ci_u(2));
-fprintf('95%% CI per mu:   [%.15f, %.15f]\n', ci_mu(1),   ci_mu(2));
-toc;
 
-%% E
-l_vector = [-1.282, -1.645, -1.96, -2.326];
+% Display the 95% confidence intervals for each parameter
+fprintf('=== Confidence intervals for d, u, and mu ===\n');
+fprintf('95%% CI for d  : [%.15f, %.15f]\n', ci_d(1), ci_d(2));
+fprintf('95%% CI for u  : [%.15f, %.15f]\n', ci_u(1), ci_u(2));
+fprintf('95%% CI for mu : [%.15f, %.15f]\n', ci_mu(1), ci_mu(2));
+
+elapsedTime = toc;
+fprintf('Execution time for Question D: %.4f seconds\n', elapsedTime);
+
+%% === E. Impact of Stop-Loss Level (l) on Annualized Return ===
+tic;
+% This section evaluates how changing the stop-loss level `l` affects
+% the annualized return of the trading strategy.
+
+% Define a vector of stop-loss thresholds (standard normal quantiles)
+l_vector = [-1.282, -1.645, -1.96, -2.326];  % Corresponding to 90%, 95%, 97.5%, 99% confidence levels
+length_l_vector = length(l_vector);
+
+% Use fixed leverage
 f = 1;
-ann_pct_return_vector = zeros(length(l_vector), 1);
-for i=1:length(l_vector)
-    [u_star, d_star, ~] = bands(c_bar, l_vector(i), SIGMA, theta, f);
-    ann_pct_return_vector(i) = optimizedReturn(X_OS, d_star, u_star, l_vector(i), c_bar, SIGMA, f, scaling_factor, w0, verbose);
+
+% Preallocate vector to store annualized percentage returns
+ann_pct_return_vector = zeros(length_l_vector, 1);
+
+% Loop through each stop-loss level and compute return
+for i = 1:length_l_vector
+    l = l_vector(i);  % Current stop-loss
+    
+    % Compute optimal bands for this stop-loss
+    [u_star, d_star, ~] = bands(c_bar, l, SIGMA, theta, f);
+    
+    % Simulate and store the annualized return from the strategy
+    ann_pct_return_vector(i) = optimizedReturn(X_OS, d_star, u_star, ...
+                                               l, c_bar, SIGMA, ...
+                                               f, scaling_factor, ...
+                                               w0, verbose);
 end
+
+% === Customized Plot 1: Return vs. Stop-Loss Level ===
 figure;
-plot(l_vector, ann_pct_return_vector)
+plot(l_vector, ann_pct_return_vector, '-o', ...
+     'LineWidth', 2, ...
+     'MarkerSize', 8, ...
+     'MarkerFaceColor', 'b', ...
+     'Color', [0.2 0.4 0.8]);
+
 grid on;
+grid minor;
+
+xlabel('Stop-loss threshold (l)', 'FontSize', 12, 'FontWeight', 'bold');
+ylabel('Annualized return (%)', 'FontSize', 12, 'FontWeight', 'bold');
+title('Effect of Stop-Loss Level on Annualized Return', 'FontSize', 14);
+
+% Annotate data points with l values
+for i = 1:length(l_vector)
+    text(l_vector(i), ann_pct_return_vector(i) + 0.01, ...
+         sprintf('l = %.3f', l_vector(i)), ...
+         'FontSize', 10, 'HorizontalAlignment', 'center');
+end
+
+xlim([min(l_vector)-0.1, max(l_vector)+0.1]);
+ylim([min(ann_pct_return_vector)-0.02, max(ann_pct_return_vector)+0.02]);
+
+set(gca, 'FontSize', 11, 'LineWidth', 1.2);
+
+% === Customized Plot 2: OU Process with Stop-Loss Thresholds ===
 figure;
-plot(X_OS, 'black'); hold on;
-yline(-1.282, "red", 'LineWidth', 1.5)
-yline( -1.645, "red", 'LineWidth', 1.5)
-yline(-1.96, "red", 'LineWidth', 1.5)
-yline(-2.326, "red", 'LineWidth', 1.5)
+plot(X_OS, 'Color', [0.1 0.1 0.1], 'LineWidth', 1.5); hold on;
 
-xlabel('time');
-ylabel('log-price process');
-legend('OU process', 'd*','u*','stop losses');
-title('title');
+% Add each stop-loss threshold with a unique color and label
+colors = lines(length(l_vector));
+for i = 1:length(l_vector)
+    yline(l_vector(i), '--', ...
+          'Color', colors(i,:), ...
+          'LineWidth', 1.5, ...
+          'Label', sprintf('l = %.3f', l_vector(i)), ...
+          'LabelHorizontalAlignment', 'left', ...
+          'LabelVerticalAlignment', 'middle', ...
+          'FontSize', 10);
+end
 
-%% Analysis with the new dataset
+xlabel('Time', 'FontSize', 12, 'FontWeight', 'bold');
+ylabel('Normalized log-price process', 'FontSize', 12, 'FontWeight', 'bold');
+title('Stop-Loss Thresholds on Normalized OU Process', 'FontSize', 14);
+grid on; grid minor;
+
+legend(['OU Process', arrayfun(@(x) sprintf('l = %.3f', x), l_vector, 'UniformOutput', false)], ...
+       'Location', 'best');
+
+set(gca, 'FontSize', 11, 'LineWidth', 1.2);
+
+elapsedTime = toc;
+fprintf('Execution time for Question E: %.4f seconds\n', elapsedTime);
+
+%% Analysis with the GovernativeFutures dataset
 clear; clc;
 close all
 format long
 
 %% Point G
-opts_new = detectImportOptions('GovernativeFutures.xlsx', 'Sheet', 'sheet1');
-opts_new.DataRange = 'A1'; % Inizia dalla riga 1
-T_new = readtable('GovernativeFutures.xlsx', opts_new);
+% Read Excel file (skip first two header rows)
+opts = detectImportOptions('GovernativeFutures.xlsx', 'Sheet', 'sheet1');
+opts.DataRange = 'A1'; % Inizia dalla riga 1
+T = readtable('GovernativeFutures.xlsx', opts);
 
-[timestamp_new, mid_IKA, mid_OATA, mid_OEA, mid_RXA, Rt_pair_1, Rt_pair_2]=dataset_preparation_new(T_new)
+% Extract columns of interest:
+column_timestamp = 1; columnIKA = 2; columnRXA = 5; converterIKA = 1; converterRXA = 1; flag = false;
+[Rt_IKA_RXA, timestamp, mid_IKA, mid_RXA, ~, ~, ~, ~] = extractionBidAskMidLogReturn(T, column_timestamp, columnIKA, columnRXA, converterIKA, converterRXA, flag);
+column_timestamp = 1; columnOATA = 3; columnOEA = 4; converterOATA = 1; converterOEA = 1; flag = false;
+[Rt_OATA_OEA, ~, mid_OATA, mid_OEA, ~, ~, ~, ~] = extractionBidAskMidLogReturn(T, column_timestamp, columnOATA, columnOEA, converterOATA, converterOEA, flag);
 
-[Rt_pair_1_IS_cleaned, Rt_pair_1_OS, time_new_IS_cleaned, time_new_OS] = cleaner(Rt_pair_1, timestamp_new, 4);
-[Rt_pair_2_IS_cleaned, Rt_pair_2_OS, time_new_IS_cleaned, time_new_OS] = cleaner(Rt_pair_2, timestamp_new, 4);
+% Clean data and split into In-Sample (IS) and Out-of-Sample (OS) periods
+InputFormat = 'yyyy-MM-dd HH:mm:ss'; splitTime = calmonths(4); verbose = true;
+[Rt_IKA_RXA_filtered, time_IKA_RXA, index_IKA_RXA_filtered] = removeOutliers(Rt_IKA_RXA, timestamp, InputFormat, verbose);
+[Rt_IKA_RXA_IS, time_IKA_RXA_IS, Rt_IKA_RXA_OS, ~] = IS_OS_split(Rt_IKA_RXA_filtered, time_IKA_RXA, splitTime, verbose);
 
-flag = 1;
-[Rt_pair_1_IS_filtered, Rt_OS_1_Filtered] = filter_NY(time_new_IS_cleaned, time_new_OS, Rt_pair_1_IS_cleaned, Rt_pair_1_OS, 8, 16, flag);
-[Rt_pair_2_IS_filtered, Rt_OS_2_Filtered] = filter_NY(time_new_IS_cleaned, time_new_OS, Rt_pair_2_IS_cleaned, Rt_pair_2_OS, 8, 16, flag);
+% Clean data and split into In-Sample (IS) and Out-of-Sample (OS) periods
+InputFormat = 'yyyy-MM-dd HH:mm:ss'; splitTime = calmonths(4); verbose = true;
+[Rt_OATA_OEA_filtered, time_OATA_OEA, index_OATA_OEA] = removeOutliers(Rt_OATA_OEA, timestamp, InputFormat, verbose);
+[Rt_OATA_OEA_IS, time_OATA_OEA_IS, Rt_OATA_OEA_OS, ~] = IS_OS_split(Rt_OATA_OEA_filtered, time_OATA_OEA, splitTime, verbose);
 
+% Filter in a specific time window
+flag = true; verbose = true; starting_hour = 8; ending_hour = 16;
+[table_IS_IKA_RXA_8_16] = filterTimeWindow(time_IKA_RXA_IS, Rt_IKA_RXA_IS, starting_hour, ending_hour, flag, verbose);
+[table_IS_OATA_OEA_8_16] = filterTimeWindow(time_OATA_OEA_IS, Rt_OATA_OEA_IS, starting_hour, ending_hour, flag, verbose);
 
-deltaT_new = (2/3)/height(Rt_pair_2_IS_filtered);
-[eta_hat_pair_1, k_hat_pair_1, sigma_hat_pair_1] = calibration(Rt_pair_1_IS_filtered, deltaT_new, 1);
-[eta_hat_pair_2, k_hat_pair_2, sigma_hat_pair_2] = calibration(Rt_pair_2_IS_filtered, deltaT_new, 1);
+% Calibration IKA RXA
+proportion = computeTimeProportion(timestamp(1), splitTime, timestamp(end));
+deltaT_IKA_RXA = proportion/height(table_IS_IKA_RXA_8_16); Rt_IKA_RXA = table2array(table_IS_IKA_RXA_8_16(:, 2));
+[eta_hat_IKA_RXA, k_hat_IKA_RXA, sigma_hat_IKA_RXA] = calibration(Rt_IKA_RXA, deltaT_IKA_RXA);
 
+% Calibration OATA OEA
+deltaT_OATA_OEA = proportion/height(table_IS_OATA_OEA_8_16); Rt_OATA_OEA = table2array(table_IS_OATA_OEA_8_16(:, 2));
+[eta_hat_OATA_OEA, k_hat_OATA_OEA, sigma_hat_OATA_OEA] = calibration(Rt_OATA_OEA, deltaT_OATA_OEA);
+
+% Simulation
 n_sim = 100;
 rng(42);
-Rt_0_pair_1 = table2array(Rt_pair_1_IS_filtered(:, 2));
-Rt_0_pair_2 = table2array(Rt_pair_2_IS_filtered(:, 2));
-
-[sigma_hat_i_pair_1, k_hat_i_pair_1, eta_hat_i_pair_1] = simulation(Rt_0_pair_1, n_sim, deltaT_new, eta_hat_pair_1, k_hat_pair_1, sigma_hat_pair_1);
-[sigma_hat_i_pair_2, k_hat_i_pair_2, eta_hat_i_pair_2] = simulation(Rt_0_pair_2, n_sim, deltaT_new, eta_hat_pair_2, k_hat_pair_2, sigma_hat_pair_2);
+[sigma_hat_i_pair_1, k_hat_i_pair_1, eta_hat_i_pair_1] = simulation(Rt_IKA_RXA, n_sim, deltaT_IKA_RXA, eta_hat_IKA_RXA, k_hat_IKA_RXA, sigma_hat_IKA_RXA);
+[sigma_hat_i_pair_2, k_hat_i_pair_2, eta_hat_i_pair_2] = simulation(Rt_OATA_OEA, n_sim, deltaT_OATA_OEA, eta_hat_OATA_OEA, k_hat_OATA_OEA, sigma_hat_OATA_OEA);
 
 alpha=0.05;
-% Mi sa che stiamo stampando due volte la stessa cosa
-% figure; histogram(k_hat_i_pair_1,100,'Normalization','pdf'); title('k\_hat 1'); 
-% figure; histogram(sigma_hat_i_pair_1,100,'Normalization','pdf'); title('\sigma\_hat 1');
-% figure; histogram(eta_hat_i_pair_1,100,'Normalization','pdf');  title('\eta\_hat 1');
-% 
-% figure; histogram(k_hat_i_pair_2,100,'Normalization','pdf'); title('k\_hat 2');
-% figure; histogram(sigma_hat_i_pair_2,100,'Normalization','pdf'); title('\sigma\_hat 2');
-% figure; histogram(eta_hat_i_pair_2,100,'Normalization','pdf');  title('\eta\_hat 2');
-% 
 
 % Confidence Intervals 95%
 ci_k_pair_1     = prctile(k_hat_i_pair_1,    [2.5, 97.5]);
@@ -245,11 +383,10 @@ ci_sigma_pair_2 = prctile(sigma_hat_i_pair_2, [2.5, 97.5]);
 ci_eta_pair_2   = prctile(eta_hat_i_pair_2,   [2.5, 97.5]);
 fprintf('===Parameters for pair 1===\n');
 print_MLE_CI(k_hat_pair_1, eta_hat_pair_1, sigma_hat_pair_1, alpha, ci_k_pair_1, ci_sigma_pair_1, ci_eta_pair_1, k_hat_i_pair_1, sigma_hat_i_pair_1, eta_hat_i_pair_1, 8)
-fprintf('===Parameters for pair 1===\n');
+fprintf('===Parameters for pair 2===\n');
 print_MLE_CI(k_hat_pair_2, eta_hat_pair_2, sigma_hat_pair_2, alpha, ci_k_pair_2, ci_sigma_pair_2, ci_eta_pair_2, k_hat_i_pair_2, sigma_hat_i_pair_2, eta_hat_i_pair_2, 8)
 
 %% Question G.C
-
 l = -1.960;
 f = 1;
 c_vals = linspace(0.001, 1.00, 100);
@@ -297,7 +434,6 @@ n = 6;
 [X_OS_pair_2, value_pair_2, ann_pct_return_pair_2] = long_run_futures(Rt_OS_2_Filtered, eta_hat_pair_2, theta_pair_2, SIGMA_pair_2, u_star_pair_2, d_star_pair_2, l, c_bar_pair_2, f);
 
 %% G.D
-
 %let's try with some leverage
 f_max = 20;
 [opt_lev_pair_1, rtn_pair_1, mu_vector_pair_1] = run_leverage(X_OS_pair_1, SIGMA_pair_1, theta_pair_1, c_bar_pair_1, l, f_max, sigma_hat_i_pair_1, k_hat_i_pair_1, expected_C_pair_1, d_star_pair_1, u_star_pair_1, value_pair_1);

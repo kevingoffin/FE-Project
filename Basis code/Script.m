@@ -126,7 +126,6 @@ for j=1:length(f)
     %fprintf('Expected theorical result over 1 year %.6f %% \n', mu(d_star, u_star, c_bar)*100)
 end
 
-rtn
 plot_leveragesVSreturns(f, rtn, opt_lev, mu_vector);
 
 %%

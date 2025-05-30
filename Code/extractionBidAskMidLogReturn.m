@@ -1,4 +1,4 @@
-function [Rt, timestamp, bid_A, bid_B, ask_A, ask_B, mid_A, mid_B] = extractionBidAskMidLogReturn(T, column_timestamp, columnBidA, columnBidB, columnAskA, columnAskB, converterA, converterB)
+function [Rt, timestamp, mid_A, mid_B, bid_A, bid_B, ask_A, ask_B] = extractionBidAskMidLogReturn(T, column_timestamp, columnA, columnB, converterA, converterB, flag)
     % EXTRACTIONBIDASKMIDLOGRETURN Processes market data for pairs trading analysis
     %
     % Extracts and processes bid/ask data for two correlated instruments to:
@@ -28,34 +28,45 @@ function [Rt, timestamp, bid_A, bid_B, ask_A, ask_B, mid_A, mid_B] = extractionB
     %   mid_B       - Mid prices for Instrument B: (bid_B + ask_B)/2
 
     %% Data Extraction Phase
-    % Extract raw price data from input table columns
-    timestamp = T{:, column_timestamp};  % Market timestamps
-    bid_A = T{:, columnBidA};            % Raw bid prices - Instrument A
-    bid_B = T{:, columnBidB};            % Raw bid prices - Instrument B
-    ask_A = T{:, columnAskA};            % Raw ask prices - Instrument A
-    ask_B = T{:, columnAskB};            % Raw ask prices - Instrument B
-    
-    %% Data Validation
-    % Identify complete observations (no missing values in any price column)
-    % This ensures all price points have both bid and ask data for both instruments
-    valid_idx = ~isnan(bid_A) & ~isnan(ask_A) & ~isnan(bid_B) & ~isnan(ask_B);
-    
-    % Apply filter to all data vectors
-    timestamp = timestamp(valid_idx);    % Filtered timestamps
-    
-    %% Price Conversion
-    % Convert prices to standardized units using conversion factors
-    % (e.g., converting different contract sizes to common units)
-    bid_A = bid_A(valid_idx) * converterA;  % Normalized Instrument A bids
-    ask_A = ask_A(valid_idx) * converterA;  % Normalized Instrument A asks
-    bid_B = bid_B(valid_idx) * converterB;  % Normalized Instrument B bids
-    ask_B = ask_B(valid_idx) * converterB;  % Normalized Instrument B asks
-    
-    %% Mid-Price Calculation
-    % Compute mid-point between bid and ask prices
-    % Represents fair market value for each instrument
-    mid_A = (bid_A + ask_A) / 2;  % Instrument A mid-price
-    mid_B = (bid_B + ask_B) / 2;  % Instrument B mid-price
+    if flag
+        % Extract raw price data from input table columns
+        timestamp = T{:, column_timestamp};  % Market timestamps
+        bid_A = T{:, columnA(1)};            % Raw bid prices - Instrument A
+        bid_B = T{:, columnB(1)};            % Raw bid prices - Instrument B
+        ask_A = T{:, columnA(2)};            % Raw ask prices - Instrument A
+        ask_B = T{:, columnB(2)};            % Raw ask prices - Instrument B
+        
+        %% Data Validation
+        % Identify complete observations (no missing values in any price column)
+        % This ensures all price points have both bid and ask data for both instruments
+        valid_idx = ~isnan(bid_A) & ~isnan(ask_A) & ~isnan(bid_B) & ~isnan(ask_B);
+        
+        % Apply filter to all data vectors
+        timestamp = timestamp(valid_idx);    % Filtered timestamps
+        
+        %% Price Conversion
+        % Convert prices to standardized units using conversion factors
+        % (e.g., converting different contract sizes to common units)
+        bid_A = bid_A(valid_idx) * converterA;  % Normalized Instrument A bids
+        ask_A = ask_A(valid_idx) * converterA;  % Normalized Instrument A asks
+        bid_B = bid_B(valid_idx) * converterB;  % Normalized Instrument B bids
+        ask_B = ask_B(valid_idx) * converterB;  % Normalized Instrument B asks
+        
+        %% Mid-Price Calculation
+        % Compute mid-point between bid and ask prices
+        % Represents fair market value for each instrument
+        mid_A = (bid_A + ask_A) / 2;  % Instrument A mid-price
+        mid_B = (bid_B + ask_B) / 2;  % Instrument B mid-price
+
+    else
+        timestamp = T{:, column_timestamp};
+        mid_A = T{:, columnA} * converterA;
+        mid_B = T{:, columnB} * converterB;
+        bid_A = [];
+        bid_B = [];
+        ask_A = [];
+        ask_B = [];
+    end
 
     %% Spread Calculation
     % Compute log price ratio (standard metric for pairs trading)
