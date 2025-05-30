@@ -170,10 +170,10 @@ format long
 
 %% Point G
 opts_new = detectImportOptions('GovernativeFutures.xlsx', 'Sheet', 'sheet1');
-opts_new.DataRange = 'A1'; % Inizia dalla riga 1
+opts_new.DataRange = 'A2'; % Inizia dalla riga 1
 T_new = readtable('GovernativeFutures.xlsx', opts_new);
 
-[timestamp_new, mid_IKA, mid_OATA, mid_OEA, mid_RXA, Rt_pair_1, Rt_pair_2]=dataset_preparation_new(T_new)
+[timestamp_new, mid_IKA, mid_OATA, mid_OEA, mid_RXA, Rt_pair_1, Rt_pair_2]=dataset_preparation_new(T_new);
 
 [Rt_pair_1_IS_cleaned, Rt_pair_1_OS, time_new_IS_cleaned, time_new_OS] = cleaner(Rt_pair_1, timestamp_new, 4);
 [Rt_pair_2_IS_cleaned, Rt_pair_2_OS, time_new_IS_cleaned, time_new_OS] = cleaner(Rt_pair_2, timestamp_new, 4);
@@ -256,21 +256,16 @@ c_vals = linspace(0.001, 1.00, 100);
  title('Figure 3 – Optimal bands vs. transaction cost');
  grid on;
 
-
 flag = 2;
-[Rt_pair_1_IS_filtered, Rt_OS_1_Filtered] = filter_NY(time_new_IS_cleaned, time_new_OS, Rt_pair_1_IS_cleaned, Rt_pair_1_OS, 17, 20, flag);
-[Rt_pair_2_IS_filtered, Rt_OS_2_Filtered] = filter_NY(time_new_IS_cleaned, time_new_OS, Rt_pair_2_IS_cleaned, Rt_pair_2_OS, 17, 20, flag);
+[~, Rt_OS_1_Filtered] = filter_NY(time_new_IS_cleaned, time_new_OS, Rt_pair_1_IS_cleaned, Rt_pair_1_OS, 17, 20, flag);
+[~, Rt_OS_2_Filtered] = filter_NY(time_new_IS_cleaned, time_new_OS, Rt_pair_2_IS_cleaned, Rt_pair_2_OS, 17, 20, flag);
  
  %% testing on OS dataset
-
 flag = 1;
 n = 6;
 
 [X_OS_pair_1, value_pair_1, ann_pct_return_pair_1] = long_run_futures(Rt_OS_1_Filtered, eta_hat_pair_1, theta_pair_1, SIGMA_pair_1, u_star_pair_1, d_star_pair_1, l, c_bar_pair_1, f);
-
 [X_OS_pair_2, value_pair_2, ann_pct_return_pair_2] = long_run_futures(Rt_OS_2_Filtered, eta_hat_pair_2, theta_pair_2, SIGMA_pair_2, u_star_pair_2, d_star_pair_2, l, c_bar_pair_2, f);
-
-
  
 %% G.D
 

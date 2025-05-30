@@ -1,4 +1,4 @@
-function [ann_return_vector] = run_stop_loss(X_OS, d_star, u_star, c_bar, SIGMA, theta)
+function [ann_return_vector] = run_stop_loss(X_OS, c_bar, SIGMA, theta)
 
     l_vector = [-1.282, -1.645, -1.96, -2.326];
     f = 1;

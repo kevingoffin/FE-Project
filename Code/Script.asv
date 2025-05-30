@@ -344,12 +344,12 @@ column_timestamp = 1; columnOATA = 3; columnOEA = 4; converterOATA = 1; converte
 % Clean data and split into In-Sample (IS) and Out-of-Sample (OS) periods
 InputFormat = 'yyyy-MM-dd HH:mm:ss'; splitTime = calmonths(4); verbose = true;
 [Rt_IKA_RXA_filtered, time_IKA_RXA, index_IKA_RXA_filtered] = removeOutliers(Rt_IKA_RXA, timestamp, InputFormat, verbose);
-[Rt_IKA_RXA_IS, time_IKA_RXA_IS, Rt_IKA_RXA_OS, time_IKA_RXA_OS] = IS_OS_split(Rt_IKA_RXA_filtered, time_IKA_RXA, splitTime, verbose);
+[Rt_IKA_RXA_IS, time_IKA_RXA_IS, Rt_IKA_RXA_OS, ~] = IS_OS_split(Rt_IKA_RXA_filtered, time_IKA_RXA, splitTime, verbose);
 
 % Clean data and split into In-Sample (IS) and Out-of-Sample (OS) periods
 InputFormat = 'yyyy-MM-dd HH:mm:ss'; splitTime = calmonths(4); verbose = true;
 [Rt_OATA_OEA_filtered, time_OATA_OEA, index_OATA_OEA] = removeOutliers(Rt_OATA_OEA, timestamp, InputFormat, verbose);
-[Rt_OATA_OEA_IS, time_OATA_OEA_IS, Rt_OATA_OEA_OS, time_OATA_OEA_OS] = IS_OS_split(Rt_OATA_OEA_filtered, time_OATA_OEA, splitTime, verbose);
+[Rt_OATA_OEA_IS, time_OATA_OEA_IS, Rt_OATA_OEA_OS, ~] = IS_OS_split(Rt_OATA_OEA_filtered, time_OATA_OEA, splitTime, verbose);
 
 % Filter in a specific time window
 flag = true; verbose = true; starting_hour = 8; ending_hour = 16;
@@ -414,7 +414,7 @@ plot(c_vals, -d_vals_OATA_OEA, 'r-', 'LineWidth', 1.5); hold on;
 plot(c_vals, u_vals_OATA_OEA, 'b--', 'LineWidth', 1.5);
 xline(c_bar_OATA_OEA, 'green--', 'LineWidth', 1.5);
 x = [c_bar_OATA_OEA,   c_bar_OATA_OEA];
-y = [-d_star_OATA_OEA, u_star_OATA_OEA];
+y = [-d_star_OATA_OEA, u_star_pair_2];
 plot(x, y, 'o', 'MarkerEdgeColor','c','MarkerFaceColor','c','LineWidth',1.5);
 xlabel('Transaction cost c (in S units)');
 ylabel('Optimal trading bands');
@@ -422,15 +422,16 @@ legend('|d^*|','u^*','Location','NorthWest');
 title('Figure 3 – Optimal bands vs. transaction cost');
 grid on;
 
-%% testing on OS dataset
-% Filter in a specific time window
-flag = false; verbose = true; starting_hour = 17; ending_hour = 20;
-[table_IKA_RXA_OS] = filterTimeWindow(time_IKA_RXA_OS, Rt_IKA_RXA_OS, starting_hour, ending_hour, flag, verbose);
-[table_OATA_OEA_OS] = filterTimeWindow(time_OATA_OEA_OS, Rt_OATA_OEA_OS, starting_hour, ending_hour, flag, verbose);
+flag = 2;
+[Rt_pair_1_IS_filtered, Rt_OS_1_Filtered] = filter_NY(time_new_IS_cleaned, time_new_OS, Rt_pair_1_IS_cleaned, Rt_pair_1_OS, 17, 20, flag);
+[Rt_pair_2_IS_filtered, Rt_OS_2_Filtered] = filter_NY(time_new_IS_cleaned, time_new_OS, Rt_pair_2_IS_cleaned, Rt_pair_2_OS, 17, 20, flag);
  
-flag = 1; n = 6; scaling_factor = 6; w0 = 1; verbose = true; verbose_optimizedReturned = false; Rt_IKA_RXA_OS_17_20 = table2array(table_IKA_RXA_OS(:,2)); Rt_OATA_OEA_OS_17_20 = table2array(table_OATA_OEA_OS(:,2));
-[X_OS_IKA_RXA, value_IKA_RXA, ~] = long_run_futures(Rt_IKA_RXA_OS_17_20, eta_hat_IKA_RXA, theta_RXA_IKA, SIGMA_RXA_IKA, u_star_RXA_IKA, d_star_RXA_IKA, l, c_bar_RXA_IKA, f, w0, scaling_factor, verbose, verbose_optimizedReturned);
-[X_OS_OATA_OEA, value_OATA_OEA, ~] = long_run_futures(Rt_OATA_OEA_OS_17_20, eta_hat_OATA_OEA, theta_OATA_OEA, SIGMA_OATA_OEA, u_star_OATA_OEA, d_star_OATA_OEA, l, c_bar_OATA_OEA, f, w0, scaling_factor, verbose, verbose_optimizedReturned);
+%% testing on OS dataset
+flag = 1;
+n = 6;
+
+[X_OS_pair_1, value_pair_1, ann_pct_return_pair_1] = long_run_futures(Rt_OS_1_Filtered, eta_hat_pair_1, theta_pair_1, SIGMA_pair_1, u_star_pair_1, d_star_pair_1, l, c_bar_pair_1, f);
+[X_OS_pair_2, value_pair_2, ann_pct_return_pair_2] = long_run_futures(Rt_OS_2_Filtered, eta_hat_pair_2, theta_pair_2, SIGMA_pair_2, u_star_pair_2, d_star_pair_2, l, c_bar_pair_2, f);
 
 %% G.D
 %let's try with some leverage
