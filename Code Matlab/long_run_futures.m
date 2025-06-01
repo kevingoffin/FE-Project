@@ -24,7 +24,6 @@ function [X_OS, value, ann_return] = long_run_futures(Rt_OS, eta_hat, theta, SIG
 
     % === 2. Calculate Strategy Metrics ===
     % Probability of hitting d_star before l (from u_star)
-    erfid = @(x, y) erfi(x./sqrt(2)) - erfi(y./sqrt(2));
     p_pls = erfid(d_star, l)/erfid(u_star,l);
     
     % Maximum sustainable transaction cost

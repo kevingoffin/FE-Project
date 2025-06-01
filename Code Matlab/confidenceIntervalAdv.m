@@ -25,35 +25,22 @@ function [ci_d, ci_u, ci_mu] = confidenceIntervalAdv(sigma_hat_i, k_hat_i, l, ex
     % === 2. Setup Reduced Parameter Grid ===
     % Trade-off between accuracy and speed - reduced grid size for optimization
     c_vals = linspace(0.001, CostUpperBound, 20);  % Coarse grid of normalized costs
-    n_c = length(c_vals);
 
-    % === 3. Pre-allocate Memory ===
-    % Stores optimal (d,u) pairs for each bootstrap sample and c value
-    D_matrix = zeros(n, n_c);  % Will contain d* values
-    U_matrix = zeros(n, n_c);  % Will contain u* values
-
-    % === 4. Parallel Parameter Optimization ===
+    % === 3. Parallel Parameter Optimization ===
     % Compute optimal bands for all (bootstrap sample × c value) combinations
-    fprintf('Computing maximize_mu for %d parameter sets...\n', n);
-    parfor i = 1:n
-        % Get optimal (d,u) for current bootstrap sample across all c_vals
-        [D_matrix(i,:), U_matrix(i,:)] = maximize_mu(c_vals, l, SIGMA_vec(i), theta_vec(i), f);
-    end
-
-    % === 5. Interpolation to c_bar Values ===
-    fprintf('Interpolating results...\n');
     d_star = zeros(n, 1);
     u_star = zeros(n, 1);
-    
     parfor i = 1:n
-        d_star(i) = interp1(c_vals, D_matrix(i,:), c_bar_vec(i), 'linear', 'extrap');
-        u_star(i) = interp1(c_vals, U_matrix(i,:), c_bar_vec(i), 'linear', 'extrap');
+        % Get optimal (d,u) for current bootstrap sample across all c_vals
+        [D, U] = maximize_mu(c_vals, l, SIGMA_vec(i), theta_vec(i), f);
+        d_star(i) = interp1(c_vals, D, c_bar_vec(i), 'linear', 'extrap');
+        u_star(i) = interp1(c_vals, U, c_bar_vec(i), 'linear', 'extrap');
     end
         
     % Compute expected return for these optimal bands
     mu_star = evaluate_mu(d_star, u_star, c_bar_vec, theta_vec, l, SIGMA_vec, f);
 
-    % === 6. Compute Confidence Intervals ===
+    % === 4. Compute Confidence Intervals ===
     % Extract 95% confidence intervals (2.5th to 97.5th percentiles)
     ci_d = prctile(d_star, [alpha * 50, 100 - alpha * 50]);   % CI for lower band
     ci_u = prctile(u_star, [alpha * 50, 100 - alpha * 50]);   % CI for upper band

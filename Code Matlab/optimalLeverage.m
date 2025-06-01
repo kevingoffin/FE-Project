@@ -28,10 +28,6 @@ function [opt_lev] = optimalLeverage(SIGMA, theta, c, l, max_leverage)
     % Return when exiting at lower band (negative outcome)
     v_minus = @(d, u) exp(SIGMA * (l - d - c)) - 1;
 
-    % === Fair Probability Weighting (Eq. 10) ===
-    % Used to balance expected gains/losses
-    q_plus = @(d, u) v_minus(d, u) / (v_minus(d, u) - v_plus(d, u));
-
     % === Optimal Leverage (Eq. 12) ===
     % Kelly-optimal leverage factor under the probabilistic setup
     f_star = @(d, u) -(p_plus(d, u) / v_minus(d, u) + p_minus(d, u) / v_plus(d, u));

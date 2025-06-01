@@ -1,4 +1,4 @@
-function [opt_lev, rtn, mu_vector] = run_leverage(X_OS, SIGMA, theta, c_bar, l, f_max, sigma_hat_i, k_hat_i, expected_C, d_star, u_star, value)
+function [opt_lev, rtn, mu_vector] = run_leverage(X_OS, SIGMA, theta, c_bar, l, f_max, sigma_hat_i, k_hat_i, expected_C, d_star, u_star, value, f, w0, scaling_factor, verbose_optimizeReturn, alpha)
     % RUN_LEVERAGE Analyzes strategy performance across different leverage levels
     % and computes confidence intervals for key parameters.
     %
@@ -24,24 +24,12 @@ function [opt_lev, rtn, mu_vector] = run_leverage(X_OS, SIGMA, theta, c_bar, l, 
     % === 1. Compute Optimal Leverage ===
     % Calculate theoretically optimal leverage based on strategy parameters
     [opt_lev] = optimalLeverage(SIGMA, theta, c_bar, l, f_max);
+    f(end) = opt_lev; f = sort(f);
 
     % === 2. Test Multiple Leverage Levels ===
-    % Define leverage levels to test (including optimal and extreme values)
-    f = [1, 5, 10, opt_lev, 28, 35, 50, 65, 75, 90, 120, 150, 200, 250, 300, 400, 600];
-    mu_vector = zeros(length(f),1);  % Store theoretical returns
-    rtn = zeros(length(f),1);        % Store empirical returns
-
-    % Evaluate strategy at each leverage level
-    for j = 1:length(f)
-        % Recompute optimal bands for current leverage
-        [u_star_lev, d_star_lev] = bands(c_bar, l, SIGMA, theta, f(j));
-        
-        % Calculate theoretical return (%)
-        mu_vector(j) = evaluate_mu(d_star_lev, u_star_lev, c_bar, theta, l, SIGMA, f(j))*100;
-        
-        % Simulate actual returns (annualized with factor 6)
-        rtn(j) = billionaire(X_OS, d_star_lev, u_star_lev, l, c_bar, SIGMA, f(j), 6);
-    end
+    [u_star_lev, d_star_lev] = bands(c_bar, l, SIGMA, theta, f);
+    mu_vector = evaluate_mu(d_star_lev, u_star_lev, c_bar, theta, l, SIGMA, f) * 100;
+    rtn = optimizedReturn(X_OS, d_star_lev, u_star_lev, l, c_bar, SIGMA, f, scaling_factor, w0, verbose_optimizeReturn);
 
     % === 3. Plot Empirical Returns vs Leverage ===
     figure;
@@ -72,14 +60,28 @@ function [opt_lev, rtn, mu_vector] = run_leverage(X_OS, SIGMA, theta, c_bar, l, 
 
     % === 5. Compute Confidence Intervals ===
     % Get 95% CIs for key parameters from bootstrap distributions
-    [ci_d, ci_u, ci_mu] = confidence_interval(sigma_hat_i, k_hat_i, l, expected_C, 1);
+    n_ci = length(sigma_hat_i);
+    u_star_ci = zeros(n_ci, 1);
+    d_star_ci = zeros(n_ci, 1);
+    mu_star_ci = zeros(n_ci, 1);
+    SIGMA = sigma_hat_i ./ sqrt(2*k_hat_i);
+    theta = 1./k_hat_i;
+    c_bar = expected_C ./ SIGMA;
+    for j=1:n_ci
+        [u_star_ci(j), d_star_ci(j), mu_star_ci(j)] = bands(c_bar(j), l, SIGMA(j), theta(j), 1);
+    end
+
+    bound = alpha * 50;
+    ci_d = prctile(d_star_ci,     [bound, 100 - bound]);
+    ci_u = prctile(u_star_ci,     [bound, 100 - bound]);
+    ci_mu = prctile(mu_star_ci,   [bound, 100 - bound]);
 
     % === 6. Display Key Results ===
     fprintf('\n=== Optimal Strategy Parameters ===\n');
     fprintf('d*: %.15f\n', d_star);
     fprintf('u*: %.15f\n', u_star);
     fprintf('μ:  %.15f\n\n', value);
-    
+
     fprintf('=== 95%% Confidence Intervals ===\n');
     fprintf('d* CI: [%.15f, %.15f]\n', ci_d(1), ci_d(2));
     fprintf('u* CI: [%.15f, %.15f]\n', ci_u(1), ci_u(2));

@@ -18,11 +18,14 @@ function [d_vals, u_vals] = maximize_mu(c_vals, l, sigma, theta, f)
     % === Function erfid(x,y) via real integral ===
     % Calculates the difference between imaginary error functions
     % Used in OU process probability calculations
+    % erfid(x,y) = erfi(x/√2) - erfi(y/√2)
     erfid = @(x, y) erfi(x./sqrt(2)) - erfi(y./sqrt(2));
 
     % === Define the long-run return function ===
     % Computes the strategy's return given bands d (lower) and u (upper)
     % Incorporates: leverage (f), transaction costs (c), and OU parameters
+    % μ = (2/(θπ)) * [log(1+f(e^{σ(u-d-c)}-1))/erfid(u,d) 
+    %               + log(1+f(e^{σ(l-d-c)}-1))/erfid(d,l)]
     mu = @(d, u, c) (2/(theta*pi))*((log(1+f*(exp(sigma*(u - d - c))-1)) ./ erfid(u, d)) + ...
                     ((log(1+f*(exp(sigma*(l - d - c))-1)) ./ erfid(d, l))));
 

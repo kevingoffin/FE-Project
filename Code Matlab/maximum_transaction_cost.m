@@ -16,12 +16,7 @@ function [C_max, p_pls, p_mns] = maximum_transaction_cost(d_star, u_star, l)
     %   Uses the imaginary error function (erfi) to compute probabilities in an
     %   Ornstein-Uhlenbeck process. Derived from stochastic process theory.
 
-    % === 1. Define helper function for erfi differences ===
-    % erfid(x,y) = erfi(x/√2) - erfi(y/√2)
-    % This computes the probability-weighted distance between thresholds
-    erfid = @(x, y) erfi(x./sqrt(2)) - erfi(y./sqrt(2));
-
-    % === 2. Compute crossing probabilities ===
+    % === 1. Compute crossing probabilities ===
     % p_pls: Probability spread hits d_star before l (starting from u_star)
     %        Represents chance of successful mean-reversion after short entry
     p_pls = erfid(d_star, l) / erfid(u_star, l);
@@ -30,7 +25,7 @@ function [C_max, p_pls, p_mns] = maximum_transaction_cost(d_star, u_star, l)
     %        Represents chance of successful mean-reversion after long entry
     p_mns = erfid(u_star, d_star) / erfid(u_star, l);
 
-    % === 3. Calculate maximum sustainable cost ===
+    % === 2. Calculate maximum sustainable cost ===
     % C_max = p_pls*(u_star - l) - (d_star - l)
     % This is the expected profit from short trades minus expected loss from long trades,
     % representing the maximum cost that maintains non-negative expected returns

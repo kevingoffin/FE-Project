@@ -25,7 +25,7 @@ function [u_star, d_star, mu_star] = bands(c_bar, l, SIGMA, theta, f_vec)
     mu_star = zeros(1, n);
 
     % === 3. Loop Over Each Leverage Value ===
-    for i = 1:n
+    parfor i = 1:n
         f = f_vec(i);
 
         % Compute optimal bands for all c_vals at current leverage

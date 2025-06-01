@@ -24,9 +24,6 @@ function mu_vec = evaluate_mu(d_vec, u_vec, c_vec, theta_vec, l_vec, SIGMA_vec, 
     SIGMA_vec = SIGMA_vec(:);
     f_vec = f_vec(:);
 
-    % Helper function: imaginary error function difference
-    erfid = @(x, y) erfi(x ./ sqrt(2)) - erfi(y ./ sqrt(2));
-
     % Compute effective deltas
     delta_up = u_vec - d_vec - c_vec;
     delta_low = l_vec - d_vec - c_vec;

@@ -1,1 +1,0 @@
-function check_outliers
